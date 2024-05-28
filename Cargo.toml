@@ -41,6 +41,7 @@ serde_json = { version = "1.0" }
 up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", version = "0.1.5" }
 url = { version = "2.5" }
 uuid = { version = "1.7", features = ["v8"] }
+vsomeip-sys = { path = "vsomeip-sys" }
 
 [dev-dependencies]
 test-case = { version = "3.3" }
