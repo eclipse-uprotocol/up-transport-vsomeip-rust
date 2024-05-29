@@ -34,14 +34,22 @@ version = "0.1.0"
 [dependencies]
 async-trait = { version = "0.1" }
 bytes = { version = "1.5" }
+cxx = { version = "1.0" }
 rand = { version = "0.8" }
 regex = { version = "1.10" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
+tokio = { version = "1.37.0", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
 up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "d736fdf35ff4728effa7f36b720f0fc1605d5ba0" }
 url = { version = "2.5" }
 uuid = { version = "1.7", features = ["v8"] }
+vsomeip-proc-macro = { path = "vsomeip-proc-macro" }
 vsomeip-sys = { path = "vsomeip-sys" }
+lazy_static = "1.4.0"
+protobuf = "3.4.0"
+env_logger = "0.11.3"
+log = { version = "0.4.21", features = [] }
+once_cell = "1.19.0"
 
 [dev-dependencies]
 test-case = { version = "3.3" }

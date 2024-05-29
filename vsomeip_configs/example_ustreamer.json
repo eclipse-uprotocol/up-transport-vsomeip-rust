@@ -1,0 +1,13 @@
+{
+  "applications" :
+  [
+    {
+      "name" : "foo",
+      "id" : "0x1236"
+    },
+    {
+      "name" : "bar",
+      "id" : "0x4321"
+    }
+  ]
+}

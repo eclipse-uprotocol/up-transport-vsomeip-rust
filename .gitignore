@@ -15,3 +15,6 @@ Cargo.lock
 
 .vscode/
 .idea/
+
+perf.data*
+*.svg

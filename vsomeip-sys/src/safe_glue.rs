@@ -11,8 +11,10 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-use crate::cxx_bridge::handler_registration::register_availability_handler_fn_ptr;
 use crate::cxx_bridge::handler_registration::register_message_handler_fn_ptr;
+use crate::cxx_bridge::handler_registration::{
+    offer_single_event, register_availability_handler_fn_ptr, request_single_event,
+};
 use crate::extern_callback_wrappers::{AvailabilityHandlerFnPtr, MessageHandlerFnPtr};
 use crate::ffi::glue::{get_payload_raw, set_payload_raw};
 use crate::glue::upcast;
@@ -21,6 +23,7 @@ use crate::unsafe_fns::create_payload_wrapper;
 use crate::vsomeip::message_base;
 use crate::vsomeip::{application, message, payload, runtime};
 use cxx::UniquePtr;
+use log::trace;
 use std::pin::Pin;
 use std::slice;
 
@@ -58,6 +61,9 @@ pub fn get_pinned_runtime(wrapper: &RuntimeWrapper) -> Pin<&mut runtime> {
 /// # TODO
 ///
 /// Add some runtime safety checks on the pointer
+///
+/// I do see a runtime panic here, perhaps when we try to work with the app before it's setup
+/// should probably do a sleep of half a second or something
 pub fn get_pinned_application(wrapper: &ApplicationWrapper) -> Pin<&mut application> {
     unsafe { Pin::new_unchecked(wrapper.get_mut().as_mut().unwrap()) }
 }
@@ -245,18 +251,80 @@ pub fn get_message_payload(
             return UniquePtr::null();
         }
 
-        println!("get_message_payload: payload_ptr = {:?}", payload_ptr);
-
         // Use the intermediate function to create a UniquePtr<PayloadWrapper>
         let payload_wrapper = create_payload_wrapper(payload_ptr);
 
         if payload_wrapper.is_null() {
             eprintln!("Failed to create UniquePtr<PayloadWrapper>");
         } else {
-            println!("Successfully created UniquePtr<PayloadWrapper>");
+            trace!("Successfully created UniquePtr<PayloadWrapper>");
         }
 
         payload_wrapper
+    }
+}
+
+/// Requests a single [eventgroup_t][crate::vsomeip::eventgroup_t] for the application
+///
+/// # Rationale
+///
+/// autocxx and cxx cannot generate bindings to a C++ function which contains
+/// a templated std::set
+///
+/// We also have agreed to have a 1:1 mapping between eventgroup_t and std::set<eventgroup_t>
+/// so this functio will be fine for now
+///
+/// If this changes in the future, we can instead create a wrapper called an EventGroup which will
+/// have a single method on it to add a single [eventgroup_t][crate::vsomeip::eventgroup_t] so that we're able to have more than
+/// one [eventgroup_t][crate::vsomeip::eventgroup_t]
+pub fn request_single_event_safe(
+    application_wrapper: &mut UniquePtr<ApplicationWrapper>,
+    _service: u16,
+    _instance: u16,
+    _notifier: u16,
+    _eventgroup: u16,
+) {
+    unsafe {
+        let application_wrapper_ptr = application_wrapper.pin_mut().get_self();
+        request_single_event(
+            application_wrapper_ptr,
+            _service,
+            _instance,
+            _notifier,
+            _eventgroup,
+        );
+    }
+}
+
+/// Offers a single [eventgroup_t][crate::vsomeip::eventgroup_t] from the application
+///
+/// # Rationale
+///
+/// autocxx and cxx cannot generate bindings to a C++ function which contains
+/// a templated std::set
+///
+/// We also have agreed to have a 1:1 mapping between eventgroup_t and std::set<eventgroup_t>
+/// so this function will be fine for now
+///
+/// If this changes in the future, we can instead create a wrapper called an EventGroup which will
+/// have a single method on it to add a single [eventgroup_t][crate::vsomeip::eventgroup_t] so that we're able to have more than
+/// one [eventgroup_t][crate::vsomeip::eventgroup_t]
+pub fn offer_single_event_safe(
+    application_wrapper: &mut UniquePtr<ApplicationWrapper>,
+    _service: u16,
+    _instance: u16,
+    _notifier: u16,
+    _eventgroup: u16,
+) {
+    unsafe {
+        let application_wrapper_ptr = application_wrapper.pin_mut().get_self();
+        offer_single_event(
+            application_wrapper_ptr,
+            _service,
+            _instance,
+            _notifier,
+            _eventgroup,
+        );
     }
 }
 
