@@ -89,6 +89,10 @@ fn main() -> miette::Result<()> {
         // Removing pub from an unsafe function we never use to suppress warning
         contents = contents.replace("pub unsafe fn create_payload1", "unsafe fn create_payload1");
 
+        // Rewriting a doc comment translated from C++ to not use [] link syntax
+        contents = contents.replace("successfully [de]registered",
+                                    "successfully de/registered");
+
         fs::write(&file_path, contents).expect("Unable to write file");
     }
 

@@ -21,6 +21,14 @@ namespace glue {
 using message_handler_fn_ptr = void (*)(const std::shared_ptr< vsomeip_v3::message > &);
 using availability_handler_fn_ptr = void (*)(vsomeip_v3::service_t, vsomeip_v3::instance_t, bool);
 
+/**
+ *
+ * \brief A C++ wrapper around an `std::shared_ptr<application>`
+ *
+ * Need as a helpful shim to work around the current challenges of interop between Rust
+ * and lifetimes of `std::shared_ptr<>` in C++
+ *
+ */
 class ApplicationWrapper {
 public:
     explicit ApplicationWrapper(std::shared_ptr<vsomeip_v3::application> ptr) : ptr_(std::move(ptr)) {}
@@ -41,7 +49,15 @@ private:
     std::shared_ptr<vsomeip_v3::application> ptr_;
 };
 
-
+/**
+ *
+ * \brief Allows us to wrap a `std::shared_ptr<vsomeip_v3::application>` into a
+ *        `std::unique_ptr<ApplicationWrapper>`
+ *
+ * We can then use the `std::unique<ApplicationWrapper>` with the `get_pinned_application()`
+ * function to call methods on a `vsomeip_v3::application` which mutate it
+ *
+ */
 std::unique_ptr<ApplicationWrapper> make_application_wrapper(std::shared_ptr<vsomeip_v3::application> ptr);
 
 } // namespace glue

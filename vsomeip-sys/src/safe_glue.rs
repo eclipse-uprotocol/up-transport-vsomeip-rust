@@ -24,28 +24,82 @@ use cxx::UniquePtr;
 use std::pin::Pin;
 use std::slice;
 
+/// Gets a `Pin<&mut runtime>` from a [RuntimeWrapper]
+///
+/// # Rationale
+///
+/// In order to use the wrapped methods on a [runtime], we must have a `Pin<&mut runtime>`
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use a UniquePtr<[RuntimeWrapper]>
+///
+/// Since we use a UniquePtr<[RuntimeWrapper]>, we then need a way to drill down and extract
+/// the `Pin<&mut runtime>`.
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn get_pinned_runtime(wrapper: &RuntimeWrapper) -> Pin<&mut runtime> {
     unsafe { Pin::new_unchecked(wrapper.get_mut().as_mut().unwrap()) }
 }
 
+/// Gets a `Pin<&mut application>` from an [ApplicationWrapper]
+///
+/// # Rationale
+///
+/// In order to use the wrapped methods on an [application], we must have a `Pin<&mut application>`
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use a UniquePtr<[ApplicationWrapper]>
+///
+/// Since we use a UniquePtr<[ApplicationWrapper]>, we then need a way to drill down and extract
+/// the `Pin<&mut application>`.
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn get_pinned_application(wrapper: &ApplicationWrapper) -> Pin<&mut application> {
     unsafe { Pin::new_unchecked(wrapper.get_mut().as_mut().unwrap()) }
 }
 
+/// Gets a `Pin<&mut message>` from a [MessageWrapper]
+///
+/// # Rationale
+///
+/// In order to use the wrapped methods on an [message], we must have a `Pin<&mut message>`
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use a UniquePtr<[MessageWrapper]>
+///
+/// Since we use a UniquePtr<[MessageWrapper]>, we then need a way to drill down and extract
+/// the `Pin<&mut message>`.
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn get_pinned_message(wrapper: &MessageWrapper) -> Pin<&mut message> {
     unsafe { Pin::new_unchecked(wrapper.get_mut().as_mut().unwrap()) }
 }
 
-pub fn get_message(wrapper: &MessageWrapper) -> Pin<&mut message> {
-    unsafe {
-        let msg_ptr: *mut message = wrapper.get_mut();
-        if msg_ptr.is_null() {
-            panic!("msg_ptr is null");
-        }
-        Pin::new_unchecked(msg_ptr.as_mut().unwrap())
-    }
-}
-
+/// Gets a `Pin<&mut message_base>` from a [MessageWrapper]
+///
+/// # Rationale
+///
+/// In order to use the methods implemented on [message_base] which are inherited by [message],
+/// we must explicitly upcast into a [message_base] and return a `Pin<&mut message_base>`
+///
+/// It appears like cxx may never handle the case of calling virtual methods of base classes,
+/// so this is the workaround that works
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use a UniquePtr<[MessageWrapper]>
+///
+/// Since we use a UniquePtr<[MessageWrapper]>, we then need a way to drill down and extract
+/// the `Pin<&mut message_base>`.
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn get_pinned_message_base(wrapper: &MessageWrapper) -> Pin<&mut message_base> {
     unsafe {
         let msg_ptr: *mut message = wrapper.get_mut();
@@ -66,10 +120,36 @@ pub fn get_pinned_message_base(wrapper: &MessageWrapper) -> Pin<&mut message_bas
     }
 }
 
+/// Gets a `Pin<&mut payload>` from a [PayloadWrapper]
+///
+/// # Rationale
+///
+/// In order to use the wrapped methods on an [payload], we must have a `Pin<&mut payload>`
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use a UniquePtr<[PayloadWrapper]>
+///
+/// Since we use a UniquePtr<[PayloadWrapper]>, we then need a way to drill down and extract
+/// the `Pin<&mut payload>`.
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn get_pinned_payload(wrapper: &PayloadWrapper) -> Pin<&mut payload> {
     unsafe { Pin::new_unchecked(wrapper.get_mut().as_mut().unwrap()) }
 }
 
+/// Sets a vsomeip [payload]'s byte buffer
+///
+/// # Rationale
+///
+/// We expose a safe API which is idiomatic to Rust, passing in a slice of u8 bytes
+///
+/// First call [get_pinned_payload], then you may call this function next
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn set_data_safe(payload: Pin<&mut payload>, _data: &[u8]) {
     // Get the length of the data
     let length = _data.len() as u32;
@@ -82,6 +162,15 @@ pub fn set_data_safe(payload: Pin<&mut payload>, _data: &[u8]) {
     }
 }
 
+/// Gets a vsomeip [payload]'s byte buffer
+///
+/// # Rationale
+///
+/// We expose a safe API which is idiomatic to Rust, returning a Vec of u8 bytes
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointer
 pub fn get_data_safe(payload_wrapper: &PayloadWrapper) -> Vec<u8> {
     let length = get_pinned_payload(payload_wrapper).get_length();
     let data_ptr = get_pinned_payload(payload_wrapper).get_data();
@@ -95,6 +184,18 @@ pub fn get_data_safe(payload_wrapper: &PayloadWrapper) -> Vec<u8> {
     data_vec
 }
 
+/// Sets a vsomeip [message]'s [payload]
+///
+/// # Rationale
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use UniquePtr<[MessageWrapper]> and UniquePtr<[PayloadWrapper]>
+///
+/// We expose a safe API which handles the underlying details of pinning and calling unsafe functions
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointers
 pub fn set_message_payload(
     message_wrapper: &mut UniquePtr<MessageWrapper>,
     payload_wrapper: &mut UniquePtr<PayloadWrapper>,
@@ -108,6 +209,18 @@ pub fn set_message_payload(
     }
 }
 
+/// Gets a vsomeip [message]'s [payload]
+///
+/// # Rationale
+///
+/// Because vsomeip makes heavy use of std::shared_ptr and Rust's ownership and borrowing model
+/// doesn't work well together with it, in Rust code use UniquePtr<[MessageWrapper]> and UniquePtr<[PayloadWrapper]>
+///
+/// We expose a safe API which handles the underlying details of pinning and calling unsafe functions
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointers
 pub fn get_message_payload(
     message_wrapper: &mut UniquePtr<MessageWrapper>,
 ) -> UniquePtr<PayloadWrapper> {
@@ -147,6 +260,19 @@ pub fn get_message_payload(
     }
 }
 
+/// Registers a [MessageHandlerFnPtr] with a vsomeip [application]
+///
+/// # Rationale
+///
+/// autocxx fails to generate bindings to application::register_message_handler()
+/// due to its signature containing a std::function
+///
+/// Therefore, we have this function which will call the glue C++ register_message_handler_fn_ptr
+/// reference there for more details
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointers
 pub fn register_message_handler_fn_ptr_safe(
     application_wrapper: &mut UniquePtr<ApplicationWrapper>,
     _service: u16,
@@ -166,6 +292,18 @@ pub fn register_message_handler_fn_ptr_safe(
     }
 }
 
+/// Registers an [AvailabilityHandlerFnPtr] with a vsomeip [application]
+///
+/// # Rationale
+///
+/// autocxx fails to generate bindings to application::register_availability_handler()
+/// due to its signature containing a std::function
+///
+/// Therefore, we have this function which will call the glue C++ register_availability_handler_fn_ptr
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointers
 pub fn register_availability_handler_fn_ptr_safe(
     application_wrapper: &mut UniquePtr<ApplicationWrapper>,
     _service: u16,

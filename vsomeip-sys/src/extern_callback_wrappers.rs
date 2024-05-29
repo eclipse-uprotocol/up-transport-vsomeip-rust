@@ -14,6 +14,12 @@
 use crate::vsomeip;
 use cxx::{type_id, ExternType, SharedPtr};
 
+/// A Rust wrapper around the extern "C" fn used when registering an [availability_handler_t](crate::vsomeip::availability_handler_t)
+///
+/// # Rationale
+///
+/// We want the ability to think at a higher level and not need to consider the underlying
+/// extern "C" fn, so we wrap this here in a Rust struct
 #[repr(transparent)]
 pub struct AvailabilityHandlerFnPtr(
     pub  extern "C" fn(
@@ -28,6 +34,12 @@ unsafe impl ExternType for AvailabilityHandlerFnPtr {
     type Kind = cxx::kind::Trivial;
 }
 
+/// A Rust wrapper around the extern "C" fn used when registering a [message_handler_t](crate::vsomeip::message_handler_t)
+///
+/// # Rationale
+///
+/// We want the ability to think at a higher level and not need to consider the underlying
+/// extern "C" fn, so we wrap this here in a Rust struct
 #[repr(transparent)]
 pub struct MessageHandlerFnPtr(pub extern "C" fn(&SharedPtr<vsomeip::message>));
 
