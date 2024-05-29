@@ -11,13 +11,10 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
+use std::sync::Arc;
 use async_trait::async_trait;
 
-use up_rust::{
-    transport::datamodel::UTransport,
-    uprotocol::{UMessage, UStatus, UUri},
-    uuid::builder::UUIDBuilder,
-};
+use up_rust::{UTransport, UMessage, UStatus, UUri, UCode, UListener};
 
 use crate::UPClientVsomeip;
 
@@ -32,29 +29,49 @@ impl UTransport for UPClientVsomeip {
 
     async fn register_listener(
         &self,
-        topic: UUri,
-        listener: Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>,
-    ) -> Result<String, UStatus> {
+        source_filter: &UUri,
+        sink_filter: Option<&UUri>,
+        _listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
         // implementation goes here
-        println!("Registering listener for topic: {:?}", topic);
-
-        listener(Ok(UMessage::new()));
-
-        let listener_id = UUIDBuilder::new().build().to_string();
-
-        Ok(listener_id)
-    }
-
-    async fn unregister_listener(&self, topic: UUri, listener: &str) -> Result<(), UStatus> {
-        // implementation goes here
-        println!("Unregistering listener: {listener} for topic: {:?}", topic);
+        let sink_filter_str = {
+            if let Some(sink_filter) = sink_filter {
+                format!("{sink_filter:?}")
+            } else {
+                "".parse().unwrap()
+            }
+        };
+        println!("Registering listener for source filter: {:?}{}", source_filter, sink_filter_str);
 
         Ok(())
     }
 
-    async fn receive(&self, _topic: UUri) -> Result<UMessage, UStatus> {
+    async fn unregister_listener(
+        &self,
+        source_filter: &UUri,
+        sink_filter: Option<&UUri>,
+        _listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
+        // implementation goes here
+        let sink_filter_str = {
+            if let Some(sink_filter) = sink_filter {
+                format!("{sink_filter:?}")
+            } else {
+                "".parse().unwrap()
+            }
+        };
+        println!("Unregistering listener for source filter: {:?}{}", source_filter, sink_filter_str);
+
+        Ok(())
+    }
+
+    async fn receive(
+        &self,
+        _source_filter: &UUri,
+        _sink_filter: Option<&UUri>,
+    ) -> Result<UMessage, UStatus> {
         Err(UStatus::fail_with_code(
-            up_rust::uprotocol::UCode::UNIMPLEMENTED,
+            UCode::UNIMPLEMENTED,
             "This method is not implemented for vsomeip. Use register_listener instead.",
         ))
     }
