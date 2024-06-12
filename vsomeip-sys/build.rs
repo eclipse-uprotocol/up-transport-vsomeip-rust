@@ -59,7 +59,7 @@ fn main() -> miette::Result<()> {
         .compile("autocxx-portion");
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rustc-link-lib=vsomeip3");
-    println!("cargo:rustc-link-search=native=/usr/local/lib");
+    println!("cargo:rustc-link-search=native={}", interface_path.display());
 
     let include_dir = project_root.join("src/glue"); // Update the path as necessary
 
@@ -166,25 +166,3 @@ fn download_and_write_file(url: &str, dest_path: &PathBuf) -> Result<(), Box<dyn
 
     Err("Failed to download file after multiple attempts".into())
 }
-// fn download_and_write_file(
-//     url: &str,
-//     dest_path: &PathBuf,
-// ) -> Result<(), Box<dyn std::error::Error>> {
-//     // Send a GET request to the URL
-//     match reqwest::blocking::get(url) {
-//         Ok(mut response) => {
-//             if let Some(parent_path) = dest_path.parent() {
-//                 std::fs::create_dir_all(parent_path)?;
-//             }
-//             let mut out_file = fs::File::create(dest_path)?;
-//
-//             let result: Result<(), Box<dyn std::error::Error>> = response
-//                 .copy_to(&mut out_file)
-//                 .map(|_| ())
-//                 .map_err(|e| e.to_string().into());
-//
-//             result
-//         }
-//         Err(e) => Err(Box::from(e)),
-//     }
-// }
