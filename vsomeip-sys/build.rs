@@ -27,6 +27,7 @@ fn main() -> miette::Result<()> {
     let vsomeip_archive_dest = Path::new(&out_dir).join("vsomeip").join("vsomeip.tar.gz");
     let vsomeip_decompressed_folder = Path::new(&out_dir).join("vsomeip").join("vsomeip-src");
     let vsomeip_archive_url = format!("{VSOMEIP_TAGGED_RELEASE_BASE}{VSOMEIP_VERSION_ARCHIVE}");
+    let vsomeip_lib_dir = env::var("VSOMEIP_LIB_DIR").unwrap_or("/usr/local/lib".to_string());
 
     download_and_write_file(&vsomeip_archive_url, &vsomeip_archive_dest)
         .expect("Unable to download released archive");
@@ -41,6 +42,11 @@ fn main() -> miette::Result<()> {
     let runtime_wrapper_dir = project_root.join("src/glue/include"); // Update the path as necessary
     let interface_path = vsomeip_decompressed_folder.join("interface");
 
+    // println!("cargo:warning=# CARGO_MANIFEST_DIR : {}", project_root.display());
+    // println!("cargo:warning=# OUT_DIR            : {}", out_path.display());
+    // println!("cargo:warning=# vsomeip_interface  : {}", interface_path.display());
+    // println!("cargo:warning=# runtime_wrapper    : {}", runtime_wrapper_dir.display());
+
     // for some reason unless we explicitly provide paths to headers for the stdlib here we have issues
     // I don't think we should really _have_ to do this though, as their locations are
     // more or less consistent on every instance of the different platforms
@@ -51,6 +57,7 @@ fn main() -> miette::Result<()> {
         .extra_clang_args(&[
             "-I/usr/include/c++/11",
             "-I/usr/include/x86_64-linux-gnu/c++/11",
+            format!("-I{}", interface_path.display()).as_str(),
         ])
         .build()?;
     b.flag_if_supported("-std=c++17")
@@ -59,7 +66,7 @@ fn main() -> miette::Result<()> {
         .compile("autocxx-portion");
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rustc-link-lib=vsomeip3");
-    println!("cargo:rustc-link-search=native={}", interface_path.display());
+    println!("cargo:rustc-link-search=native={}", vsomeip_lib_dir);
 
     let include_dir = project_root.join("src/glue"); // Update the path as necessary
 
@@ -69,7 +76,12 @@ fn main() -> miette::Result<()> {
         .file("src/glue/application_registrations.cpp")
         .file("src/glue/src/application_wrapper.cpp")
         .include(&include_dir)
+        .include(&interface_path)
+        .include(&runtime_wrapper_dir)
+        .flag_if_supported("-Wno-deprecated-declarations") // suppress warnings from C++
+        .flag_if_supported("-Wno-unused-function") // compiler compiling vsomeip
         .flag_if_supported("-std=c++17")
+        .extra_warnings(true)
         .compile("cxx-portion");
     println!("cargo:rerun-if-changed=src/cxx_bridge.rs");
 
