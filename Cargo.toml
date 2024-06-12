@@ -25,7 +25,7 @@ exclude = [
 ]
 keywords = ["uProtocol", "SDK", "vsomeip", "SOMEIP"]
 license = "Apache-2.0"
-name = "up-client-vsomeip-rust"
+name = "up-transport-vsomeip"
 readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-client-vsomeip-rust"
 rust-version = "1.72"

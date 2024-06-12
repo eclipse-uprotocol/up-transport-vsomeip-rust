@@ -18,8 +18,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
-use up_client_vsomeip_rust::UPClientVsomeip;
 use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UStatus, UTransport, UUri};
+use up_transport_vsomeip::UPTransportVsomeip;
 
 pub struct ResponseListener {
     received_response: AtomicUsize,
@@ -48,13 +48,13 @@ impl UListener for ResponseListener {
     }
 }
 pub struct RequestListener {
-    client: Arc<UPClientVsomeip>,
+    client: Arc<UPTransportVsomeip>,
     received_request: AtomicUsize,
 }
 
 impl RequestListener {
     #[allow(clippy::new_without_default)]
-    pub fn new(client: Arc<UPClientVsomeip>) -> Self {
+    pub fn new(client: Arc<UPTransportVsomeip>) -> Self {
         Self {
             client,
             received_request: AtomicUsize::new(0),
@@ -123,7 +123,7 @@ async fn client_service() {
     let client_config = canonicalize(client_config).ok();
     println!("client_config: {client_config:?}");
 
-    let client_res = UPClientVsomeip::new_with_config(
+    let client_res = UPTransportVsomeip::new_with_config(
         &client_authority_name.to_string(),
         streamer_ue_id,
         &client_config.unwrap(),
@@ -171,7 +171,7 @@ async fn client_service() {
     let service_config = canonicalize(service_config).ok();
     println!("service_config: {service_config:?}");
 
-    let service_res = UPClientVsomeip::new_with_config(
+    let service_res = UPTransportVsomeip::new_with_config(
         &service_authority_name.to_string(),
         streamer_ue_id,
         &service_config.unwrap(),

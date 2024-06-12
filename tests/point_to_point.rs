@@ -19,23 +19,23 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
-use up_client_vsomeip_rust::UPClientVsomeip;
 use up_rust::UMessageType::UMESSAGE_TYPE_UNSPECIFIED;
 use up_rust::{
     UCode, UListener, UMessage, UMessageBuilder, UMessageType, UStatus, UTransport, UUri,
 };
+use up_transport_vsomeip::UPTransportVsomeip;
 
 const TEST_SLACK: usize = 1;
 
 pub struct PointToPointListener {
-    client: Arc<UPClientVsomeip>,
+    client: Arc<UPTransportVsomeip>,
     received_request: AtomicUsize,
     received_response: AtomicUsize,
 }
 
 impl PointToPointListener {
     #[allow(clippy::new_without_default)]
-    pub fn new(client: Arc<UPClientVsomeip>) -> Self {
+    pub fn new(client: Arc<UPTransportVsomeip>) -> Self {
         Self {
             client,
             received_request: AtomicUsize::new(0),
@@ -129,13 +129,13 @@ impl UListener for ResponseListener {
 }
 
 pub struct RequestListener {
-    client: Arc<UPClientVsomeip>,
+    client: Arc<UPTransportVsomeip>,
     received_request: AtomicUsize,
 }
 
 impl RequestListener {
     #[allow(clippy::new_without_default)]
-    pub fn new(client: Arc<UPClientVsomeip>) -> Self {
+    pub fn new(client: Arc<UPTransportVsomeip>) -> Self {
         Self {
             client,
             received_request: AtomicUsize::new(0),
@@ -211,7 +211,7 @@ async fn point_to_point() {
     let abs_vsomeip_config_path = canonicalize(vsomeip_config_path).ok();
     info!("abs_vsomeip_config_path: {abs_vsomeip_config_path:?}");
 
-    let point_to_point_client_res = UPClientVsomeip::new_with_config(
+    let point_to_point_client_res = UPTransportVsomeip::new_with_config(
         &service_authority_name.to_string(),
         streamer_ue_id,
         &abs_vsomeip_config_path.unwrap(),
@@ -285,7 +285,7 @@ async fn point_to_point() {
     let client_config = canonicalize(client_config).ok();
     info!("client_config: {client_config:?}");
 
-    let client_res = UPClientVsomeip::new_with_config(
+    let client_res = UPTransportVsomeip::new_with_config(
         &client_authority_name.to_string(),
         streamer_ue_id,
         &client_config.unwrap(),
@@ -319,7 +319,7 @@ async fn point_to_point() {
     let service_config = canonicalize(service_config).ok();
     info!("service_config: {service_config:?}");
 
-    let service_res = UPClientVsomeip::new_with_config(
+    let service_res = UPTransportVsomeip::new_with_config(
         &service_authority_name.to_string(),
         streamer_ue_id,
         &service_config.unwrap(),

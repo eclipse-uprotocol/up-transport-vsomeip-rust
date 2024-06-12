@@ -12,12 +12,12 @@
  ********************************************************************************/
 
 pub mod test_lib;
-use up_client_vsomeip_rust::UPClientVsomeip;
+use up_transport_vsomeip::UPTransportVsomeip;
 
 #[cfg(test)]
 mod tests {
     use crate::test_lib::PrintingListener;
-    use crate::{test_lib, UPClientVsomeip};
+    use crate::{test_lib, UPTransportVsomeip};
     use log::{error, trace};
     use std::path::Path;
     use std::sync::Arc;
@@ -29,7 +29,7 @@ mod tests {
     fn test_constructing_client() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10);
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10);
 
         thread::sleep(Duration::from_millis(100));
 
@@ -40,7 +40,7 @@ mod tests {
     async fn test_registering_publish() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10).unwrap();
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10).unwrap();
 
         let source_filter = UUri {
             authority_name: "foo".to_string(),
@@ -81,7 +81,7 @@ mod tests {
     async fn test_registering_unregistering_publish() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10).unwrap();
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10).unwrap();
 
         let source_filter = UUri {
             authority_name: "foo".to_string(),
@@ -123,7 +123,7 @@ mod tests {
     async fn test_registering_request() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10).unwrap();
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10).unwrap();
 
         let source_filter = UUri {
             authority_name: "foo".to_string(),
@@ -160,7 +160,7 @@ mod tests {
     async fn test_registering_unregistering_request() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10).unwrap();
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10).unwrap();
 
         let source_filter = UUri {
             authority_name: "foo".to_string(),
@@ -209,7 +209,7 @@ mod tests {
     async fn test_registering_response() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10).unwrap();
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10).unwrap();
 
         let source_filter = UUri {
             authority_name: "foo".to_string(),
@@ -246,7 +246,7 @@ mod tests {
     async fn test_registering_unregistering_response() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new(&"foo".to_string(), 10).unwrap();
+        let client = UPTransportVsomeip::new(&"foo".to_string(), 10).unwrap();
 
         let source_filter = UUri {
             authority_name: "foo".to_string(),
@@ -297,7 +297,7 @@ mod tests {
     async fn test_registering_all_point_to_point() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new_with_config(
+        let client = UPTransportVsomeip::new_with_config(
             &"baz".to_string(),
             10,
             Path::new("vsomeip_configs/example_ustreamer.json"),
@@ -339,7 +339,7 @@ mod tests {
     async fn test_registering_unregistering_all_point_to_point() {
         test_lib::before_test();
 
-        let client = UPClientVsomeip::new_with_config(
+        let client = UPTransportVsomeip::new_with_config(
             &"foo".to_string(),
             10,
             Path::new("vsomeip_configs/example_ustreamer_2.json"),

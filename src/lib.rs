@@ -127,7 +127,7 @@ impl RegistrationType {
     }
 }
 
-pub struct UPClientVsomeip {
+pub struct UPTransportVsomeip {
     // we're going to be using this for error messages, so suppress this warning for now
     #[allow(dead_code)]
     authority_name: AuthorityName,
@@ -142,7 +142,7 @@ pub struct UPClientVsomeip {
     tx_to_event_loop: Sender<TransportCommand>,
 }
 
-impl UPClientVsomeip {
+impl UPTransportVsomeip {
     pub fn new_with_config(
         authority_name: &AuthorityName,
         ue_id: UeId,

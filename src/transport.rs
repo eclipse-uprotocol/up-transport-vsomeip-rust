@@ -21,7 +21,7 @@ use crate::{
     ClientId, ReqId, RequestId, SessionId, UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL,
     UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL,
 };
-use crate::{RegistrationType, UPClientVsomeip};
+use crate::{RegistrationType, UPTransportVsomeip};
 use crate::{
     TransportCommand, UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER_INTERNAL, UP_CLIENT_VSOMEIP_TAG,
 };
@@ -132,7 +132,7 @@ async fn send_to_inner_with_status(
 }
 
 #[async_trait]
-impl UTransport for UPClientVsomeip {
+impl UTransport for UPTransportVsomeip {
     async fn send(&self, message: UMessage) -> Result<(), UStatus> {
         trace!("Sending message: {:?}", message);
 
@@ -378,7 +378,7 @@ impl UTransport for UPClientVsomeip {
     }
 }
 
-impl UPClientVsomeip {
+impl UPTransportVsomeip {
     async fn register_for_returning_response_if_point_to_point_listener_and_sending_request(
         &self,
         message: &UMessage,
