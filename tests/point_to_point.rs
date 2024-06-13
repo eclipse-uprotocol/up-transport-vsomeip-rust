@@ -221,8 +221,8 @@ async fn point_to_point() {
     };
     let point_to_point_client = Arc::new(point_to_point_client);
 
-    let source = any_from_authority(service_authority_name);
-    let sink = any_uuri();
+    let source = any_uuri();
+    let sink = any_from_authority(service_authority_name);
 
     let point_to_point_listener_check =
         Arc::new(PointToPointListener::new(point_to_point_client.clone()));

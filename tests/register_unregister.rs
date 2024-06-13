@@ -305,14 +305,14 @@ mod tests {
         .unwrap();
 
         let source_filter = UUri {
-            authority_name: "me_authority".to_string(),
+            authority_name: "*".to_string(),
             ue_id: 0x0000_FFFF,
             ue_version_major: 0xFF,
             resource_id: 0xFFFF,
             ..Default::default()
         };
         let sink_filter = UUri {
-            authority_name: "*".to_string(),
+            authority_name: "me_authority".to_string(),
             ue_id: 0x0000_FFFF,
             ue_version_major: 0xFF,
             resource_id: 0xFFFF,
@@ -347,14 +347,14 @@ mod tests {
         .unwrap();
 
         let source_filter = UUri {
-            authority_name: "me_authority".to_string(),
+            authority_name: "*".to_string(),
             ue_id: 0x0000_FFFF,
             ue_version_major: 0xFF,
             resource_id: 0xFFFF,
             ..Default::default()
         };
         let sink_filter = UUri {
-            authority_name: "*".to_string(),
+            authority_name: "me_authority".to_string(),
             ue_id: 0x0000_FFFF,
             ue_version_major: 0xFF,
             resource_id: 0xFFFF,
