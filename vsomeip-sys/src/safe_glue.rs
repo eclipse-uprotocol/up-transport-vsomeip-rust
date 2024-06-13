@@ -160,8 +160,12 @@ pub fn set_data_safe(payload: Pin<&mut payload>, _data: &[u8]) {
     // Get the length of the data
     let length = _data.len() as u32;
 
+    trace!("length of payload: {length}");
+
     // Get a pointer to the data
     let data_ptr = _data.as_ptr();
+
+    trace!("data_ptr: {data_ptr:?}");
 
     unsafe {
         payload.set_data(data_ptr, length);
@@ -181,8 +185,21 @@ pub fn get_data_safe(payload_wrapper: &PayloadWrapper) -> Vec<u8> {
     let length = get_pinned_payload(payload_wrapper).get_length();
     let data_ptr = get_pinned_payload(payload_wrapper).get_data();
 
+    trace!("get_data_safe: length: {length}");
+
+    if data_ptr.is_null() {
+        trace!("get_data_safe: data_ptr is null");
+        return Vec::new();
+    }
+    trace!("get_data_safe: data_ptr is not null");
+
+    trace!("Before slice::from_raw_parts");
+
     // Convert the raw pointer and length to a slice
+    // TODO: May be crashing here? Would be good to check this
     let data_slice: &[u8] = unsafe { slice::from_raw_parts(data_ptr, length as usize) };
+
+    trace!("After slice::from_raw_parts");
 
     // Convert the slice to a Vec
     let data_vec: Vec<u8> = data_slice.to_vec();

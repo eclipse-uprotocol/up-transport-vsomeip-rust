@@ -176,11 +176,14 @@ pub async fn convert_umsg_to_vsomeip_msg(
             get_pinned_message_base(&vsomeip_msg).set_return_code(vsomeip::return_code_e::E_OK);
             let payload = {
                 if let Some(bytes) = umsg.payload.clone() {
+                    trace!("payload is set, it's: {bytes:?}");
                     bytes.to_vec()
                 } else {
+                    trace!("payload is not set");
                     Vec::new()
                 }
             };
+            trace!("therefore, payload is: {payload:?}");
             let mut vsomeip_payload =
                 make_payload_wrapper(get_pinned_runtime(runtime_wrapper).create_payload());
             set_data_safe(get_pinned_payload(&vsomeip_payload), &payload);
