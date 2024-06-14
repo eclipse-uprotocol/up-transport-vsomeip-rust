@@ -40,7 +40,7 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::LocalSet;
 use tokio::time::{timeout, Instant};
-use up_rust::{ComparableListener, UCode, UListener, UMessage, UStatus, UTransport, UUri};
+use up_rust::{ComparableListener, UAttributesValidators, UCode, UListener, UMessage, UMessageType, UStatus, UTransport, UUri};
 use vsomeip_proc_macro::generate_message_handler_extern_c_fns;
 use vsomeip_sys::extern_callback_wrappers::MessageHandlerFnPtr;
 use vsomeip_sys::glue::{make_application_wrapper, make_message_wrapper, make_runtime_wrapper};
@@ -134,7 +134,66 @@ async fn send_to_inner_with_status(
 #[async_trait]
 impl UTransport for UPTransportVsomeip {
     async fn send(&self, message: UMessage) -> Result<(), UStatus> {
-        // TODO: Add validtion on message before send, using UAttributesValidators
+
+        let attributes = message.attributes.as_ref().ok_or(UStatus::fail_with_code(
+            UCode::INVALID_ARGUMENT,
+            "Invalid uAttributes",
+        ))?;
+
+        match attributes
+            .type_
+            .enum_value()
+            .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse type"))?
+        {
+            UMessageType::UMESSAGE_TYPE_PUBLISH => {
+                UAttributesValidators::Publish
+                    .validator()
+                    .validate(attributes)
+                    .map_err(|e| {
+                        let msg = format!("Wrong Publish UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+                    })?;
+            }
+            UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
+                return Err(UStatus::fail_with_code(UCode::UNIMPLEMENTED, "Notification messages not yet supported"))
+
+                // We will support Notifications in the future
+                // UAttributesValidators::Notification
+                //     .validator()
+                //     .validate(attributes)
+                //     .map_err(|e| {
+                //         let msg = format!("Wrong Notification UAttributes: {e:?}");
+                //         log::error!("{msg}");
+                //         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+                //     })?;
+            }
+            UMessageType::UMESSAGE_TYPE_REQUEST => {
+                UAttributesValidators::Request
+                    .validator()
+                    .validate(attributes)
+                    .map_err(|e| {
+                        let msg = format!("Wrong Request UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+                    })?;
+            }
+            UMessageType::UMESSAGE_TYPE_RESPONSE => {
+                UAttributesValidators::Response
+                    .validator()
+                    .validate(attributes)
+                    .map_err(|e| {
+                        let msg = format!("Wrong Response UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+                    })?;
+            }
+            UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
+                let msg = "Wrong Message type in UAttributes".to_string();
+                log::error!("{msg}");
+                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+            }
+        }
 
         trace!("Sending message: {:?}", message);
 
@@ -145,7 +204,18 @@ impl UTransport for UPTransportVsomeip {
             ));
         };
 
+        source_filter.verify_no_wildcards().map_err(|e| {
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, format!("Invalid source: {e:?}"))
+        })?;
+
         let sink_filter = message.attributes.sink.as_ref();
+
+        if let Some(sink) = sink_filter {
+            sink.verify_no_wildcards().map_err(|e| {
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, format!("Invalid sink: {e:?}"))
+            })?;
+        }
+
         let message_type = determine_message_type(source_filter, &sink_filter.cloned())?;
         trace!("inside send(), message_type: {message_type:?}");
         let app_name = find_app_name(message_type.client_id()).await;
@@ -180,7 +250,6 @@ impl UTransport for UPTransportVsomeip {
         sink_filter: Option<&UUri>,
         listener: Arc<dyn UListener>,
     ) -> Result<(), UStatus> {
-        // TODO: Must add additional validation up here on the UUri filters
 
         let registration_type_res =
             determine_registration_type(source_filter, &sink_filter.cloned(), self.ue_id);
