@@ -32,7 +32,6 @@ use lazy_static::lazy_static;
 use log::{error, trace, warn};
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, HashSet};
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use tokio::runtime::Runtime;
@@ -268,8 +267,6 @@ impl UTransport for UPTransportVsomeip {
             }
         }
 
-        let comp_listener = ComparableListener::new(listener);
-
         let (tx, rx) = oneshot::channel();
         send_to_inner_with_status(
             &self.tx_to_event_loop,
@@ -278,7 +275,8 @@ impl UTransport for UPTransportVsomeip {
         .await?;
         await_internal_function(UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL, rx).await?;
 
-        Self::release_listener_id(&source_filter, &sink_filter, &comp_listener).await?;
+        let comp_listener = ComparableListener::new(listener);
+        Self::release_listener_id(source_filter, &sink_filter, &comp_listener).await?;
 
         Ok(())
     }
@@ -376,11 +374,11 @@ impl UPTransportVsomeip {
             .write()
             .await
             .insert(listener_id, listener.clone())
-            .and_then(|_| {
-                Some(Err(UStatus::fail_with_code(
+            .map(|_| {
+                Err(UStatus::fail_with_code(
                     UCode::INTERNAL,
                     "Unable to register the same listener_id and listener twice",
-                )))
+                ))
             })
             .unwrap_or(Ok(()))?;
         Ok(())
@@ -437,10 +435,6 @@ impl UPTransportVsomeip {
             if !insert_into_listener_id_map(key, listener_id).await {
                 return Err(free_listener_id(listener_id).await);
             }
-
-            let mut hasher = DefaultHasher::new();
-            comp_listener.hash(&mut hasher);
-            let listener_hash = hasher.finish();
 
             Self::register_listener_id_with_listener(listener_id, listener.clone()).await?;
 
@@ -574,7 +568,7 @@ impl UPTransportVsomeip {
         registration_type: &RegistrationType,
         app_name: Result<ApplicationName, UStatus>,
     ) -> Result<ApplicationName, UStatus> {
-        let app_name = {
+        {
             if let Err(err) = app_name {
                 warn!(
                     "No app found for client_id: {}, err: {err:?}",
@@ -614,9 +608,7 @@ impl UPTransportVsomeip {
             } else {
                 Ok(app_name.unwrap())
             }
-        };
-
-        Ok(app_name?)
+        }
     }
 
     async fn map_listener_id_to_client_id(
@@ -624,13 +616,10 @@ impl UPTransportVsomeip {
         listener_id: usize,
     ) -> Result<(), UStatus> {
         let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
-        listener_client_id_mapping.insert(listener_id, client_id)
-            .and_then(|_| {
-                Some(Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    format!("Unable to have the same listener_id with a different client_id, i.e. tied to app: listener_id: {} client_id: {}", listener_id, client_id),
-                )))
-            })
+        listener_client_id_mapping.insert(listener_id, client_id).map(|_| Err(UStatus::fail_with_code(
+            UCode::INTERNAL,
+            format!("Unable to have the same listener_id with a different client_id, i.e. tied to app: listener_id: {} client_id: {}", listener_id, client_id),
+        )))
             .unwrap_or(Ok(()))?;
         Ok(())
     }
