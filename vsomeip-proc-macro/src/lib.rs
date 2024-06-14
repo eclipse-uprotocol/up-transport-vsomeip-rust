@@ -112,10 +112,13 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
                 let runtime_wrapper = make_runtime_wrapper(vsomeip::runtime::get());
                 let_cxx_string!(app_name_cxx = &*app_name);
 
-                // TODO: May want to add a check here that we did succeed. Perhaps within make_application_wrapper
                 let application_wrapper = make_application_wrapper(
                     get_pinned_runtime(&runtime_wrapper).get_application(&app_name_cxx),
                 );
+                if application_wrapper.get_mut().is_null() {
+                    error!("Unable to obtain vsomeip application with app_name: {app_name}");
+                    return;
+                }
                 let cloned_vsomeip_msg = vsomeip_msg.clone();
                 let mut vsomeip_msg_wrapper = make_message_wrapper(cloned_vsomeip_msg);
 
