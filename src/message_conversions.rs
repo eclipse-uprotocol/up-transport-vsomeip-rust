@@ -147,8 +147,12 @@ pub async fn convert_umsg_to_vsomeip_msg(
             let (_, _, _, interface_version) = split_u32_to_u8(sink.ue_version_major);
             get_pinned_message_base(&vsomeip_msg).set_interface_version(interface_version);
 
-            // TODO: Remove .unwrap()
-            let req_id = umsg.attributes.id.as_ref().unwrap();
+            let req_id = umsg.attributes.id.as_ref().ok_or_else(|| {
+                UStatus::fail_with_code(
+                    UCode::INVALID_ARGUMENT,
+                    "Missing id for Request message. Would be unable to correlate. Rejected.",
+                )
+            })?;
             let app_client_id = get_pinned_application(application_wrapper).get_client();
             let app_session_id = retrieve_session_id(app_client_id).await; // only rewritten by vsomeip for REQUESTs
             let request_id = create_request_id(app_client_id, app_session_id);
@@ -220,8 +224,12 @@ pub async fn convert_umsg_to_vsomeip_msg(
             let (_, _, _, interface_version) = split_u32_to_u8(source.ue_version_major);
             get_pinned_message_base(&vsomeip_msg).set_interface_version(interface_version);
 
-            // TODO: Remove .unwrap()
-            let req_id = umsg.attributes.reqid.as_ref().unwrap();
+            let req_id = umsg.attributes.reqid.as_ref().ok_or_else(|| {
+                UStatus::fail_with_code(
+                    UCode::INVALID_ARGUMENT,
+                    "Missing id for Request message. Would be unable to correlate. Rejected.",
+                )
+            })?;
             trace!(
                 "{} - Looking up req_id from UMessage in ME_REQUEST_CORRELATION, req_id: {}",
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG,
@@ -361,8 +369,12 @@ pub async fn convert_vsomeip_msg_to_umsg(
                 ));
             };
 
-            // TODO: Remove .unwrap()
-            let req_id = umsg.attributes.id.as_ref().unwrap();
+            let req_id = umsg.attributes.id.as_ref().ok_or_else(|| {
+                UStatus::fail_with_code(
+                    UCode::INVALID_ARGUMENT,
+                    "Missing id for Request message. Would be unable to correlate. Rejected.",
+                )
+            })?;
             trace!("{} - (req_id, request_id) to store for later correlation in ME_REQUEST_CORRELATION: ({}, {})",
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
                 req_id.to_hyphenated_string(), request_id

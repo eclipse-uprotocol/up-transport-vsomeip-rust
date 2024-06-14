@@ -189,7 +189,7 @@ impl UPTransportVsomeip {
         })
     }
 
-    fn create_app(app_name: &ApplicationName, config_path: Option<&Path>) {
+    fn create_app(app_name: &ApplicationName, config_path: Option<&Path>) -> Result<(), UStatus> {
         let app_name = app_name.to_string();
         let config_path = config_path.map(|p| p.to_path_buf());
 
@@ -202,9 +202,6 @@ impl UPTransportVsomeip {
             let config_path = config_path.map(|p| p.to_path_buf());
             let runtime_wrapper = make_runtime_wrapper(vsomeip::runtime::get());
             let_cxx_string!(app_name_cxx = app_name);
-            // TODO: Add some additional checks to ensure we succeeded, e.g. check not null pointer
-            //  This is probably best handled at a lower level in vsomeip-sys
-            //  and surfacing a new API
             let application_wrapper = {
                 if let Some(config_path) = config_path {
                     let config_path_str = config_path.display().to_string();
@@ -219,12 +216,20 @@ impl UPTransportVsomeip {
                     )
                 }
             };
+            if application_wrapper.get_mut().is_null() {
+                return Err(UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    "Unable to create vsomeip application",
+                ));
+            }
 
             get_pinned_application(&application_wrapper).init();
             let client_id = get_pinned_application(&application_wrapper).get_client();
             trace!("start_app: after starting app we see its client_id: {client_id}");
             // FYI: thread is blocked by vsomeip here
             get_pinned_application(&application_wrapper).start();
+
+            Ok(())
         });
 
         trace!(
@@ -235,6 +240,8 @@ impl UPTransportVsomeip {
 
         // TODO: Should be removed in favor of a signal-based strategy
         thread::sleep(Duration::from_millis(50));
+
+        Ok(())
     }
 
     fn start_event_loop(rx_to_event_loop: Receiver<TransportCommand>, config_path: Option<&Path>) {
@@ -586,7 +593,6 @@ impl UPTransportVsomeip {
                 let instance_id = vsomeip::ANY_INSTANCE; // TODO: Set this to 1? To ANY_INSTANCE?
                 let (_, method_id) = split_u32_to_u16(source_filter.resource_id);
 
-                // TODO: Fix this, should not be ANY_MAJOR and ANY_MINOR
                 {
                     let requested_services = REQUESTED_SERVICES.write().await;
                     if !requested_services.contains(&(service_id, instance_id, method_id)) {
@@ -790,7 +796,7 @@ impl UPTransportVsomeip {
                 );
 
                 let payload = get_message_payload(&mut vsomeip_msg).get_shared_ptr();
-                // TODO: Talk about with @StevenHartley. Note that we cannot set the interface_version
+                // TODO: Note that we cannot set the interface_version
                 get_pinned_application(application_wrapper).notify(
                     service_id,
                     instance_id,
@@ -871,8 +877,7 @@ impl UPTransportVsomeip {
             return Err(err);
         }
 
-        // TODO: Should this be fallible?
-        Self::create_app(&app_name, config_path.as_deref());
+        Self::create_app(&app_name, config_path.as_deref())?;
         trace!(
             "{}:{} - After starting app for client_id: {} app_name: {}",
             UP_CLIENT_VSOMEIP_TAG,

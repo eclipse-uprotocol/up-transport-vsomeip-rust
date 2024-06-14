@@ -153,7 +153,7 @@ fn determine_type(
     if let Some(sink_filter) = &sink_filter {
         // determine if we're in the uStreamer use-case of capturing all point-to-point messages
         let streamer_use_case = {
-            source_filter.authority_name == "*" // TODO: Is this good enough? Maybe have configurable in UPClientVsomeip?
+            source_filter.authority_name == "*"
                 && source_filter.ue_id == 0x0000_FFFF
                 && source_filter.ue_version_major == 0xFF
                 && source_filter.resource_id == 0xFFFF

@@ -40,7 +40,10 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::LocalSet;
 use tokio::time::{timeout, Instant};
-use up_rust::{ComparableListener, UAttributesValidators, UCode, UListener, UMessage, UMessageType, UStatus, UTransport, UUri};
+use up_rust::{
+    ComparableListener, UAttributesValidators, UCode, UListener, UMessage, UMessageType, UStatus,
+    UTransport, UUri,
+};
 use vsomeip_proc_macro::generate_message_handler_extern_c_fns;
 use vsomeip_sys::extern_callback_wrappers::MessageHandlerFnPtr;
 use vsomeip_sys::glue::{make_application_wrapper, make_message_wrapper, make_runtime_wrapper};
@@ -134,7 +137,6 @@ async fn send_to_inner_with_status(
 #[async_trait]
 impl UTransport for UPTransportVsomeip {
     async fn send(&self, message: UMessage) -> Result<(), UStatus> {
-
         let attributes = message.attributes.as_ref().ok_or(UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
             "Invalid uAttributes",
@@ -156,7 +158,10 @@ impl UTransport for UPTransportVsomeip {
                     })?;
             }
             UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
-                return Err(UStatus::fail_with_code(UCode::UNIMPLEMENTED, "Notification messages not yet supported"))
+                return Err(UStatus::fail_with_code(
+                    UCode::UNIMPLEMENTED,
+                    "Notification messages not yet supported",
+                ));
 
                 // We will support Notifications in the future
                 // UAttributesValidators::Notification
@@ -250,7 +255,6 @@ impl UTransport for UPTransportVsomeip {
         sink_filter: Option<&UUri>,
         listener: Arc<dyn UListener>,
     ) -> Result<(), UStatus> {
-
         let registration_type_res =
             determine_registration_type(source_filter, &sink_filter.cloned(), self.ue_id);
         let Ok(registration_type) = registration_type_res else {
