@@ -12,14 +12,15 @@
  ********************************************************************************/
 
 use crate::determinations::{
-    determine_message_type, determine_registration_type, find_app_name, find_available_listener_id,
-    free_listener_id, insert_into_listener_id_map,
+    any_uuri, any_uuri_fixed_authority_id, determine_message_type, determine_registration_type,
+    find_app_name, find_available_listener_id, free_listener_id, insert_into_listener_id_map,
 };
 use crate::message_conversions::convert_vsomeip_msg_to_umsg;
 use crate::vsomeip_config::extract_applications;
 use crate::{
-    ClientId, ReqId, RequestId, SessionId, UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL,
-    UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL,
+    ApplicationName, ClientId, ReqId, RequestId, SessionId,
+    UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
+    UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL,
 };
 use crate::{RegistrationType, UPTransportVsomeip};
 use crate::{
@@ -134,6 +135,8 @@ async fn send_to_inner_with_status(
 #[async_trait]
 impl UTransport for UPTransportVsomeip {
     async fn send(&self, message: UMessage) -> Result<(), UStatus> {
+        // TODO: Add validtion on message before send, using UAttributesValidators
+
         trace!("Sending message: {:?}", message);
 
         let Some(source_filter) = message.attributes.source.as_ref() else {
@@ -149,27 +152,8 @@ impl UTransport for UPTransportVsomeip {
         let app_name = find_app_name(message_type.client_id()).await;
         trace!("app_name: {app_name:?}");
 
-        if let Err(err) = app_name {
-            warn!("{err:?}");
-
-            let app_name = format!("{}", message_type.client_id());
-
-            let (tx, rx) = oneshot::channel();
-            trace!(
-                "{}:{} - Sending TransportCommand for InitializeNewApp. client_id: {} app_name: {}",
-                UP_CLIENT_VSOMEIP_TAG,
-                UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER,
-                message_type.client_id(),
-                app_name
-            );
-            send_to_inner_with_status(
-                &self.tx_to_event_loop,
-                TransportCommand::InitializeNewApp(message_type.client_id(), app_name, tx),
-            )
+        self.initialize_vsomeip_app_as_needed(&message_type, app_name)
             .await?;
-            await_internal_function(UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL, rx)
-                .await?;
-        }
 
         let app_name = format!("{}", message_type.client_id());
         trace!("app_name: {app_name}");
@@ -221,14 +205,9 @@ impl UTransport for UPTransportVsomeip {
         if !insert_into_listener_id_map(key, listener_id).await {
             return Err(free_listener_id(listener_id).await);
         }
-
         trace!("Inserted into LISTENER_ID_MAP");
 
-        // TODO: Need to do some verification on returned Option<>
-        LISTENER_REGISTRY
-            .write()
-            .await
-            .insert(listener_id, listener);
+        Self::register_listener_id_with_listener(listener_id, listener).await?;
 
         let app_name = find_app_name(registration_type.client_id()).await;
         let extern_fn = get_extern_fn(listener_id);
@@ -238,37 +217,10 @@ impl UTransport for UPTransportVsomeip {
 
         trace!("Obtained extern_fn");
 
-        if let Err(err) = app_name {
-            warn!(
-                "No app found for client_id: {}, err: {err:?}",
-                registration_type.client_id()
-            );
-
-            let app_name = format!("{}", registration_type.client_id());
-
-            let (tx, rx) = oneshot::channel();
-            trace!(
-                "{}:{} - Sending TransportCommand for InitializeNewApp",
-                UP_CLIENT_VSOMEIP_TAG,
-                UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER
-            );
-            send_to_inner_with_status(
-                &self.tx_to_event_loop,
-                TransportCommand::InitializeNewApp(
-                    registration_type.client_id(),
-                    app_name.clone(),
-                    tx,
-                ),
-            )
+        self.initialize_vsomeip_app_as_needed(&registration_type, app_name)
             .await?;
-            await_internal_function(UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL, rx)
-                .await?;
-        }
 
-        {
-            let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
-            listener_client_id_mapping.insert(listener_id, registration_type.client_id());
-        }
+        Self::map_listener_id_to_client_id(registration_type.client_id(), listener_id).await?;
 
         let (tx, rx) = oneshot::channel();
         send_to_inner_with_status(
@@ -326,42 +278,7 @@ impl UTransport for UPTransportVsomeip {
         .await?;
         await_internal_function(UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL, rx).await?;
 
-        let listener_id = {
-            let mut id_map = LISTENER_ID_MAP.write().await;
-            if let Some(&id) = id_map.get(&(
-                source_filter.clone(),
-                sink_filter.cloned(),
-                comp_listener.clone(),
-            )) {
-                id_map.remove(&(source_filter.clone(), sink_filter.cloned(), comp_listener));
-                id
-            } else {
-                return Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    "Listener not found",
-                ));
-            }
-        };
-
-        {
-            let mut registry = LISTENER_REGISTRY.write().await;
-            registry.remove(&listener_id);
-        }
-
-        {
-            let mut free_ids = FREE_LISTENER_IDS.write().await;
-            free_ids.insert(listener_id);
-        }
-
-        {
-            let mut client_id_app_mapping = CLIENT_ID_APP_MAPPING.write().await;
-            client_id_app_mapping.remove(&registration_type.client_id());
-        }
-
-        {
-            let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
-            listener_client_id_mapping.remove(&listener_id);
-        }
+        Self::release_listener_id(&source_filter, &sink_filter, &comp_listener).await?;
 
         Ok(())
     }
@@ -406,11 +323,7 @@ impl UPTransportVsomeip {
                 trace!("{:?}", free_listener_id(listener_id).await);
                 return Ok(());
             }
-            // TODO: Need to do some verification on returned Option<>
-            LISTENER_REGISTRY
-                .write()
-                .await
-                .insert(listener_id, listener.clone());
+            Self::register_listener_id_with_listener(listener_id, listener).await?;
 
             let extern_fn = get_extern_fn(listener_id);
             let msg_handler = MessageHandlerFnPtr(extern_fn);
@@ -429,11 +342,7 @@ impl UPTransportVsomeip {
             trace!("source used when registering:\n{src:?}");
             trace!("sink used when registering:\n{sink:?}");
 
-            {
-                let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
-                // TODO: Check that this succeeds
-                listener_client_id_mapping.insert(listener_id, message_type.client_id());
-            }
+            Self::map_listener_id_to_client_id(message_type.client_id(), listener_id).await?;
 
             trace!(
                 "listener_id mapped to client_id: listener_id: {listener_id} client_id: {}",
@@ -456,6 +365,24 @@ impl UPTransportVsomeip {
             await_internal_function(UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER_INTERNAL, rx)
                 .await?;
         }
+        Ok(())
+    }
+
+    async fn register_listener_id_with_listener(
+        listener_id: usize,
+        listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
+        LISTENER_REGISTRY
+            .write()
+            .await
+            .insert(listener_id, listener.clone())
+            .and_then(|_| {
+                Some(Err(UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    "Unable to register the same listener_id and listener twice",
+                )))
+            })
+            .unwrap_or(Ok(()))?;
         Ok(())
     }
 
@@ -492,7 +419,8 @@ impl UPTransportVsomeip {
             )
             .await?;
             await_internal_function(
-                "Initializing point-to-point listener apps. ApplicationConfig: {app_config:?}",
+                &format!("Initializing point-to-point listener apps. ApplicationConfig: {:?} app_config.id: {} app_config.name: {}",
+                app_config, app_config.id, app_config.name),
                 rx,
             )
             .await?;
@@ -500,50 +428,23 @@ impl UPTransportVsomeip {
             let listener_id = find_available_listener_id().await?;
             let comp_listener = ComparableListener::new(listener.clone());
 
-            let src = UUri {
-                authority_name: "*".to_string(),
-                ue_id: 0x0000_FFFF,     // any instance, any service
-                ue_version_major: 0xFF, // any
-                resource_id: 0xFFFF,    // any
-                ..Default::default()
-            };
-
+            let src = any_uuri();
             // TODO: How to explicitly handle instance_id?
             //  I'm not sure it's possible to set within the vsomeip config file
-            let sink = UUri {
-                authority_name: self.authority_name.clone(),
-                ue_id: app_config.id as u32,
-                ue_version_major: 0xFF, // any
-                resource_id: 0xFFFF,    // any
-                ..Default::default()
-            };
+            let sink = any_uuri_fixed_authority_id(&self.authority_name, app_config.id);
 
             let key = (src.clone(), Some(sink.clone()), comp_listener.clone());
-            {
-                let mut id_map = LISTENER_ID_MAP.write().await;
-                id_map.insert(key, listener_id);
+            if !insert_into_listener_id_map(key, listener_id).await {
+                return Err(free_listener_id(listener_id).await);
             }
 
             let mut hasher = DefaultHasher::new();
             comp_listener.hash(&mut hasher);
             let listener_hash = hasher.finish();
 
-            trace!("Inserted into src: {src:?} sink: {sink:?} listener_hash: {listener_hash} listener_id: {listener_id}");
+            Self::register_listener_id_with_listener(listener_id, listener.clone()).await?;
 
-            // TODO: Need to do some verification on returned Option<>
-            LISTENER_REGISTRY
-                .write()
-                .await
-                .insert(listener_id, listener.clone());
-
-            {
-                let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
-                trace!(
-                    "Adding listener_id -> client_id: listener_id: {listener_id} app_config.id: {}",
-                    app_config.id
-                );
-                listener_client_id_mapping.insert(listener_id, app_config.id);
-            }
+            Self::map_listener_id_to_client_id(app_config.id, listener_id).await?;
 
             let extern_fn = get_extern_fn(listener_id);
             let msg_handler = MessageHandlerFnPtr(extern_fn);
@@ -571,7 +472,7 @@ impl UPTransportVsomeip {
     async fn unregister_point_to_point_listener(
         &self,
         listener: &Arc<dyn UListener>,
-        registration_type: &RegistrationType,
+        _registration_type: &RegistrationType, // keep this for now as we may stop the application associated
     ) -> Result<(), UStatus> {
         let Some(config_path) = &self.config_path else {
             let err_msg = "No path to a vsomeip config file was provided";
@@ -601,58 +502,136 @@ impl UPTransportVsomeip {
         }
 
         for app_config in &application_configs {
-            let src = UUri {
-                authority_name: "*".to_string(),
-                ue_id: 0x0000_FFFF,     // any instance, any service
-                ue_version_major: 0xFF, // any
-                resource_id: 0xFFFF,    // any
-                ..Default::default()
-            };
-            let sink = UUri {
-                authority_name: self.authority_name.clone(),
-                ue_id: app_config.id as u32,
-                ue_version_major: 0xFF, // any
-                resource_id: 0xFFFF,    // any
-                ..Default::default()
-            };
+            let src = any_uuri();
+            let sink = any_uuri_fixed_authority_id(&self.authority_name, app_config.id);
 
             trace!("Searching for src: {src:?} sink: {sink:?} to find listener_id");
 
-            let listener_id = {
-                let mut id_map = LISTENER_ID_MAP.write().await;
-                if let Some(&id) =
-                    id_map.get(&(src.clone(), Some(sink.clone()), comp_listener.clone()))
-                {
-                    id_map.remove(&(src.clone(), Some(sink.clone()), comp_listener.clone()));
-                    id
-                } else {
-                    return Err(UStatus::fail_with_code(
-                        UCode::INTERNAL,
-                        "Listener not found",
-                    ));
-                }
-            };
-
-            {
-                let mut registry = LISTENER_REGISTRY.write().await;
-                registry.remove(&listener_id);
-            }
-
-            {
-                let mut free_ids = FREE_LISTENER_IDS.write().await;
-                free_ids.insert(listener_id);
-            }
-
-            {
-                let mut client_id_app_mapping = CLIENT_ID_APP_MAPPING.write().await;
-                client_id_app_mapping.remove(&registration_type.client_id());
-            }
-
-            {
-                let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
-                listener_client_id_mapping.remove(&listener_id);
-            }
+            Self::release_listener_id(&src, &Some(&sink), &comp_listener).await?;
         }
+        Ok(())
+    }
+
+    async fn release_listener_id(
+        source_filter: &UUri,
+        sink_filter: &Option<&UUri>,
+        comp_listener: &ComparableListener,
+    ) -> Result<(), UStatus> {
+        let listener_id = {
+            let mut id_map = LISTENER_ID_MAP.write().await;
+            if let Some(&id) = id_map.get(&(
+                source_filter.clone(),
+                sink_filter.cloned(),
+                comp_listener.clone(),
+            )) {
+                id_map.remove(&(
+                    source_filter.clone(),
+                    sink_filter.cloned(),
+                    comp_listener.clone(),
+                ));
+                id
+            } else {
+                return Err(UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    "Listener not found",
+                ));
+            }
+        };
+
+        let _client_id = {
+            let mut registry = LISTENER_REGISTRY.write().await;
+            registry.remove(&listener_id).ok_or_else(|| {
+                UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    format!("Unable to locate UListener for listener_id: {listener_id}"),
+                )
+            })?;
+
+            let mut free_ids = FREE_LISTENER_IDS.write().await;
+            free_ids.insert(listener_id).then_some(()).ok_or_else(|| {
+                UStatus::fail_with_code(UCode::INTERNAL, format!("Unable to re-insert listener_id back into free listeners, listener_id: {listener_id}"))
+            })?;
+
+            let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
+            listener_client_id_mapping.remove(&listener_id).ok_or_else(|| {
+                UStatus::fail_with_code(UCode::INTERNAL, format!("Unable to locate client_id (i.e. for app) for listener_id: {listener_id}"))
+            })?
+        };
+
+        // TODO: If we're going to remove the client_id -> app_name mapping we should only do so if
+        //  there are no other users of this client_id
+        //  Would also imply that we should close down the vsomeip application
+        // {
+        //     let mut client_id_app_mapping = CLIENT_ID_APP_MAPPING.write().await;
+        //     client_id_app_mapping.remove(&registration_type.client_id());
+        // }
+
+        Ok(())
+    }
+
+    async fn initialize_vsomeip_app_as_needed(
+        &self,
+        registration_type: &RegistrationType,
+        app_name: Result<ApplicationName, UStatus>,
+    ) -> Result<ApplicationName, UStatus> {
+        let app_name = {
+            if let Err(err) = app_name {
+                warn!(
+                    "No app found for client_id: {}, err: {err:?}",
+                    registration_type.client_id()
+                );
+
+                let app_name = format!("{}", registration_type.client_id());
+
+                let (tx, rx) = oneshot::channel();
+                trace!(
+                    "{}:{} - Sending TransportCommand for InitializeNewApp",
+                    UP_CLIENT_VSOMEIP_TAG,
+                    UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER
+                );
+                send_to_inner_with_status(
+                    &self.tx_to_event_loop,
+                    TransportCommand::InitializeNewApp(
+                        registration_type.client_id(),
+                        app_name.clone(),
+                        tx,
+                    ),
+                )
+                .await?;
+                let internal_res = await_internal_function(
+                    UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL,
+                    rx,
+                )
+                .await;
+                if let Err(err) = internal_res {
+                    Err(UStatus::fail_with_code(
+                        UCode::INTERNAL,
+                        format!("Unable to start app for app_name: {app_name}, err: {err:?}"),
+                    ))
+                } else {
+                    Ok(app_name)
+                }
+            } else {
+                Ok(app_name.unwrap())
+            }
+        };
+
+        Ok(app_name?)
+    }
+
+    async fn map_listener_id_to_client_id(
+        client_id: ClientId,
+        listener_id: usize,
+    ) -> Result<(), UStatus> {
+        let mut listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.write().await;
+        listener_client_id_mapping.insert(listener_id, client_id)
+            .and_then(|_| {
+                Some(Err(UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    format!("Unable to have the same listener_id with a different client_id, i.e. tied to app: listener_id: {} client_id: {}", listener_id, client_id),
+                )))
+            })
+            .unwrap_or(Ok(()))?;
         Ok(())
     }
 }

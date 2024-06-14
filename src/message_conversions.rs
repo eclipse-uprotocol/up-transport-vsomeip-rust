@@ -97,7 +97,6 @@ pub async fn convert_umsg_to_vsomeip_msg(
             {
                 let mut offered_events = OFFERED_EVENTS.write().await;
                 if !offered_events.contains(&(service_id, instance_id, event_id)) {
-                    // TODO: These things need only be done once -- consider how to know we already did this
                     get_pinned_application(application_wrapper).offer_service(
                         service_id,
                         instance_id,
@@ -170,8 +169,7 @@ pub async fn convert_umsg_to_vsomeip_msg(
                     app_request_id, req_id.to_hyphenated_string(),
                 );
             } else {
-                // TODO: What do we do if we have a duplicate, already-existing pair?
-                //  Eject the previous one? Fail on this one?
+                return Err(UStatus::fail_with_code(UCode::ALREADY_EXISTS, format!("Already exists same request with id: {app_request_id}, therefore rejecting")));
             }
             get_pinned_message_base(&vsomeip_msg).set_return_code(vsomeip::return_code_e::E_OK);
             let payload = {
@@ -377,8 +375,12 @@ pub async fn convert_vsomeip_msg_to_umsg(
                 );
                 me_request_correlation.insert(req_id.clone(), request_id);
             } else {
-                // TODO: What do we do if we have a duplicate, already-existing pair?
-                //  Eject the previous one? Fail on this one?
+                return Err(UStatus::fail_with_code(
+                    UCode::ALREADY_EXISTS,
+                    format!(
+                        "Already exists same MT_REQUEST with id: {req_id}, therefore rejecting"
+                    ),
+                ));
             }
 
             Ok(umsg)

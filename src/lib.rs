@@ -479,7 +479,6 @@ impl UPTransportVsomeip {
                 {
                     let requested_events = REQUESTED_EVENTS.write().await;
                     if !requested_events.contains(&(service_id, instance_id, event_id)) {
-                        // TODO: Need only do these things once per register
                         get_pinned_application(application_wrapper).request_service(
                             service_id,
                             instance_id,
@@ -827,7 +826,6 @@ impl UPTransportVsomeip {
                     method_id
                 );
 
-                // TODO: Add logging here that we succeeded
                 let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
                 get_pinned_application(application_wrapper).send(shared_ptr_message);
             }
@@ -839,8 +837,8 @@ impl UPTransportVsomeip {
         result: Result<(), UStatus>,
         tx: oneshot::Sender<Result<(), UStatus>>,
     ) {
-        if let Err(_err) = tx.send(result) {
-            // TODO: Add logging here that we couldn't return a result
+        if let Err(err) = tx.send(result) {
+            error!("Unable to return oneshot result back to transport: {err:?}");
         }
     }
 
@@ -893,7 +891,7 @@ impl UPTransportVsomeip {
 }
 
 // TODO: We need to ensure that we properly cleanup / unregister all message handlers
-//  and then remote the application
+//  and then remove the application
 // impl Drop for UPClientVsomeip {
 //     fn drop(&mut self) {
 //         // TODO: Should do this a bit more carefully, for now we will just stop all active vsomeip

@@ -14,9 +14,31 @@
 use crate::transport::{
     CLIENT_ID_APP_MAPPING, CLIENT_ID_SESSION_ID_TRACKING, FREE_LISTENER_IDS, LISTENER_ID_MAP,
 };
-use crate::{ApplicationName, ClientId, RegistrationType, RequestId, SessionId, UeId};
+use crate::{
+    ApplicationName, AuthorityName, ClientId, RegistrationType, RequestId, SessionId, UeId,
+};
 use log::{info, trace};
 use up_rust::{ComparableListener, UCode, UStatus, UUri};
+
+pub(crate) fn any_uuri() -> UUri {
+    UUri {
+        authority_name: "*".to_string(),
+        ue_id: 0x0000_FFFF,     // any instance, any service
+        ue_version_major: 0xFF, // any
+        resource_id: 0xFFFF,    // any
+        ..Default::default()
+    }
+}
+
+pub(crate) fn any_uuri_fixed_authority_id(authority_name: &AuthorityName, ue_id: UeId) -> UUri {
+    UUri {
+        authority_name: authority_name.to_string(),
+        ue_id: ue_id as u32,
+        ue_version_major: 0xFF, // any
+        resource_id: 0xFFFF,    // any
+        ..Default::default()
+    }
+}
 
 pub(crate) async fn free_listener_id(listener_id: usize) -> UStatus {
     info!("listener_id was not used since we already have registered for this");
@@ -161,7 +183,7 @@ fn determine_type(
         let client_id = {
             match determination_type {
                 DeterminationType::Register => {
-                    my_ue_id.expect("Should have been a own ue_id available in this path")
+                    my_ue_id.expect("Should have been an own ue_id available in this path")
                 }
                 DeterminationType::Message => source_filter.ue_id as ClientId,
             }

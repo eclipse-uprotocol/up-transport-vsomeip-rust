@@ -18,7 +18,7 @@ use quote::{format_ident, quote};
 use syn::{parse_macro_input, LitInt};
 
 /// Generates "N" number of extern "C" fns to be used and recycled by the up-client-vsomeip-rust
-/// imlementation.
+/// implementation.
 ///
 /// # Rationale
 ///
