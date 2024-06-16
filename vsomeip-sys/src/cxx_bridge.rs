@@ -95,6 +95,39 @@ pub mod handler_registration {
             _major: u8,
             _minor: u32,
         );
+
+        type subscription_status_handler_fn_ptr =
+            crate::extern_callback_wrappers::SubscriptionStatusHandlerFnPtr;
+
+        /// Registers a subscription status handler
+        ///
+        /// # Rationale
+        ///
+        /// This function exists as a workaround, since the vsomeip API for
+        /// application::register_subscription_status_handler() takes a std::function
+        /// which is not supported by autocxx or cxx
+        ///
+        /// So we instead use this C++ glue code which accepts a function pointer
+        /// and creates a lambda with which to then call application::register_subscription_status_handler()
+        ///
+        /// # Parameters
+        ///
+        /// * _application_wrapper - An [crate::cxx_bridge::handler_registration::ApplicationWrapper]
+        /// * _service - A SOME/IP [service_t](crate::vsomeip::service_t), i.e service ID
+        /// * _instance - A SOME/IP [instance_t](crate::vsomeip::instance_t), i.e instance ID
+        /// * _eventgroup - A SOME/IP [eventgroup_t](crate::vsomeip::eventgroup_t)
+        /// * _event - A SOME/IP [event_t](crate::vsomeip::event_t)
+        /// * _fn_ptr_handler - A [SubscriptionStatusHandlerFnPtr](crate::extern_callback_wrappers::SubscriptionStatusHandlerFnPtr)
+        /// * _is_selective - If true the callback is called even when there's an error registering the subscription
+        pub unsafe fn register_subscription_status_handler_fn_ptr(
+            _application_wrapper: *mut ApplicationWrapper,
+            _service: u16,
+            _instance: u16,
+            _eventgroup: u16,
+            _event: u16,
+            _fn_ptr_handler: subscription_status_handler_fn_ptr,
+            _is_selective: bool,
+        );
     }
 }
 

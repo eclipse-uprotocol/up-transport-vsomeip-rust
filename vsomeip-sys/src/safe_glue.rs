@@ -11,11 +11,13 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-use crate::cxx_bridge::handler_registration::register_message_handler_fn_ptr;
 use crate::cxx_bridge::handler_registration::{
-    offer_single_event, register_availability_handler_fn_ptr, request_single_event,
+    offer_single_event, register_availability_handler_fn_ptr, register_message_handler_fn_ptr,
+    register_subscription_status_handler_fn_ptr, request_single_event,
 };
-use crate::extern_callback_wrappers::{AvailabilityHandlerFnPtr, MessageHandlerFnPtr};
+use crate::extern_callback_wrappers::{
+    AvailabilityHandlerFnPtr, MessageHandlerFnPtr, SubscriptionStatusHandlerFnPtr,
+};
 use crate::ffi::glue::{get_payload_raw, set_payload_raw};
 use crate::glue::upcast;
 use crate::glue::{ApplicationWrapper, MessageWrapper, PayloadWrapper, RuntimeWrapper};
@@ -406,6 +408,41 @@ pub fn register_availability_handler_fn_ptr_safe(
             _fn_ptr_handler,
             _major_version,
             _minor_version,
+        );
+    }
+}
+
+/// Registers a [SubscriptionStatusHandlerFnPtr] with a vsomeip [application]
+///
+/// # Rationale
+///
+/// autocxx fails to generate bindings to application::register_subscription_status_handler()
+/// due to its signature containing a std::function
+///
+/// Therefore, we have this function which will call the glue C++ register_subscription_status_handler_fn_ptr
+///
+/// # TODO
+///
+/// Add some runtime safety checks on the pointers
+pub fn register_subscription_status_handler_fn_ptr_safe(
+    application_wrapper: &mut UniquePtr<ApplicationWrapper>,
+    _service: u16,
+    _instance: u16,
+    _eventgroup: u16,
+    _event: u16,
+    _fn_ptr_handler: SubscriptionStatusHandlerFnPtr,
+    _is_selective: bool,
+) {
+    unsafe {
+        let application_wrapper_ptr = application_wrapper.pin_mut().get_self();
+        register_subscription_status_handler_fn_ptr(
+            application_wrapper_ptr,
+            _service,
+            _instance,
+            _eventgroup,
+            _event,
+            _fn_ptr_handler,
+            _is_selective,
         );
     }
 }

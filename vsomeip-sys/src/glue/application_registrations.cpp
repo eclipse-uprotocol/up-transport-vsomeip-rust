@@ -63,5 +63,15 @@ void register_availability_handler_fn_ptr(ApplicationWrapper* application_wrappe
     application_wrapper->get_shared_ptr()->register_availability_handler(_service, _instance, _handler, _major, _minor);
 }
 
+void register_subscription_status_handler_fn_ptr(ApplicationWrapper* application_wrapper, vsomeip_v3::service_t _service,
+                                          vsomeip_v3::instance_t _instance, vsomeip_v3::eventgroup_t _eventgroup, vsomeip_v3::event_t _event,
+                                          subscription_status_handler_fn_ptr _fn_ptr_handler, bool _is_selective) {
+
+    auto _handler = vsomeip_v3::subscription_status_handler_t(_fn_ptr_handler);
+
+    application_wrapper->get_shared_ptr()->register_subscription_status_handler(_service, _instance, _eventgroup, _event,
+                                                                                _handler, _is_selective);
+}
+
 }
 
