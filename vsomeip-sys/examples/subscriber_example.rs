@@ -68,6 +68,30 @@ fn main() {
         SAMPLE_EVENT_ID,
         SAMPLE_EVENTGROUP_ID,
     );
+
+    extern "C" fn subscription_status_listener(
+        service: vsomeip::service_t,
+        instance: vsomeip::instance_t,
+        eventgroup: vsomeip::eventgroup_t,
+        event: vsomeip::event_t,
+        status: u16, // TODO: This should really be an enum with a repr of u16: 0x00: OK or 0x7 Not OK
+    ) {
+        println!("Subscription status changed:\n service: {} instance: {} eventgroup: {} event: {} status: {}",
+                 service, instance, eventgroup, instance, status);
+    }
+
+    let subscription_status_handler_fn_ptr = SubscriptionStatusHandlerFnPtr(subscription_status_listener);
+
+    register_subscription_status_handler_fn_ptr_safe(
+        &mut app_wrapper,
+        vsomeip::ANY_SERVICE,
+        vsomeip::ANY_INSTANCE,
+        vsomeip::ANY_EVENTGROUP,
+        vsomeip::ANY_EVENT,
+        subscription_status_handler_fn_ptr,
+        true,
+    );
+
     get_pinned_application(&app_wrapper).subscribe(
         SAMPLE_SERVICE_ID,
         SAMPLE_INSTANCE_ID,

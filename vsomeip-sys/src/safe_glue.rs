@@ -260,6 +260,7 @@ pub fn get_message_payload(
         let message_pin = Pin::new_unchecked(message_wrapper.as_mut().unwrap());
         let message_ptr = MessageWrapper::get_mut(&message_pin) as *const message;
 
+        // TODO: Should handle by returning None instead of a null pointer
         if (message_ptr as *const ()).is_null() {
             eprintln!("message_ptr is null");
             return UniquePtr::null();

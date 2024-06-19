@@ -14,6 +14,7 @@
 #include "application_registrations.h"
 
 #include <set>
+#include <iostream>
 
 namespace glue {
 
@@ -67,10 +68,23 @@ void register_subscription_status_handler_fn_ptr(ApplicationWrapper* application
                                           vsomeip_v3::instance_t _instance, vsomeip_v3::eventgroup_t _eventgroup, vsomeip_v3::event_t _event,
                                           subscription_status_handler_fn_ptr _fn_ptr_handler, bool _is_selective) {
 
-    auto _handler = vsomeip_v3::subscription_status_handler_t(_fn_ptr_handler);
+    std::cout << "Entered register_subscription_status_handler_fn_ptr" << std::endl;
+
+    // auto _handler = vsomeip_v3::subscription_status_handler_t(_fn_ptr_handler);
+
+    vsomeip_v3::subscription_status_handler_t _handler = [=](vsomeip_v3::service_t _service, vsomeip_v3::instance_t _instance,
+                                                             vsomeip_v3::eventgroup_t _eventgroup, vsomeip_v3::event_t _event,
+                                                             uint16_t _status) {
+
+        _fn_ptr_handler(_service, _instance, _eventgroup, _event, _status);
+    };
+
+    std::cout << "Setting up handler" << std::endl;
 
     application_wrapper->get_shared_ptr()->register_subscription_status_handler(_service, _instance, _eventgroup, _event,
                                                                                 _handler, _is_selective);
+
+    std::cout << "Finished register_subscription_status_handler" << std::endl;
 }
 
 }

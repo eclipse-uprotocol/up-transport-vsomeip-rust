@@ -60,7 +60,7 @@ pub struct SubscriptionStatusHandlerFnPtr(
         service: crate::ffi::vsomeip_v3::service_t,
         instance: crate::ffi::vsomeip_v3::instance_t,
         eventgroup: crate::ffi::vsomeip_v3::eventgroup_t,
-        instance: crate::ffi::vsomeip_v3::event_t,
+        event: crate::ffi::vsomeip_v3::event_t,
         status: u16, // TODO: This should really be an enum with a repr of u16: 0x00: OK or 0x7 Not OK
     ),
 );
