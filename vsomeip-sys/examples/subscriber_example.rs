@@ -2,7 +2,7 @@ use cxx::{let_cxx_string, SharedPtr};
 use std::thread;
 use std::thread::{park, sleep};
 use std::time::Duration;
-use vsomeip_sys::extern_callback_wrappers::{AvailabilityHandlerFnPtr, MessageHandlerFnPtr};
+use vsomeip_sys::extern_callback_wrappers::{AvailabilityHandlerFnPtr, MessageHandlerFnPtr, SubscriptionStatusHandlerFnPtr};
 use vsomeip_sys::glue::{
     make_application_wrapper, make_message_wrapper, make_payload_wrapper, make_runtime_wrapper,
 };
@@ -84,10 +84,15 @@ fn main() {
         println!("received event!");
 
         let cloned_msg = _msg.clone();
-        let msg_wrapper = make_message_wrapper(cloned_msg);
+        let mut msg_wrapper = make_message_wrapper(cloned_msg);
 
         let msg_type = get_pinned_message_base(&msg_wrapper).get_message_type();
         println!("message_type_e: {msg_type:?}");
+
+        let payload_wrapper = get_message_payload(&mut msg_wrapper);
+        let payload = get_data_safe(&payload_wrapper);
+
+        println!("payload:\n{payload:?}")
     }
     let my_callback = MessageHandlerFnPtr(my_msg_handler);
 

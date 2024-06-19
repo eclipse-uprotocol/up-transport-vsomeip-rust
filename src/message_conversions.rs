@@ -325,9 +325,9 @@ pub async fn convert_vsomeip_msg_to_umsg(
     let payload = get_message_payload(vsomeip_message);
     let payload_bytes = get_data_safe(&payload);
 
-    trace!("{} - : request_id: {} client_id: {} session_id: {} service_id: {} instance_id: {} method_id: {} interface_version: {}",
+    trace!("{} - : request_id: {} client_id: {} session_id: {} service_id: {} instance_id: {} method_id: {} interface_version: {} payload_bytes: {:?}",
         UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
-        request_id, client_id, session_id, service_id, instance_id, method_id, interface_version
+        request_id, client_id, session_id, service_id, instance_id, method_id, interface_version, payload_bytes
     );
 
     let authority_name = { AUTHORITY_NAME.lock().await.clone() };

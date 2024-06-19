@@ -82,6 +82,8 @@ fn main() {
 
         set_data_safe(get_pinned_payload(&payload_wrapper), &payload_data);
 
+        println!("packed message with payload:\n{payload_data:?}");
+
         println!("attempting notify...");
         // get_pinned_application(&app_wrapper).notify_one(
         //     SAMPLE_SERVICE_ID,
