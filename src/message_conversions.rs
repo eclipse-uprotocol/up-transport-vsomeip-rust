@@ -18,20 +18,17 @@ use crate::{
 };
 use cxx::UniquePtr;
 use lazy_static::lazy_static;
-use log::trace;
+use log::{log_enabled, trace};
 use protobuf::Enum;
 use std::collections::HashSet;
 use std::time::Duration;
+use log::Level::Trace;
 use tokio::sync::RwLock;
 use up_rust::{UCode, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UStatus, UUri};
 use vsomeip_sys::glue::{
     make_message_wrapper, make_payload_wrapper, ApplicationWrapper, MessageWrapper, RuntimeWrapper,
 };
-use vsomeip_sys::safe_glue::{
-    get_data_safe, get_message_payload, get_pinned_application, get_pinned_message_base,
-    get_pinned_payload, get_pinned_runtime, offer_single_event_safe, set_data_safe,
-    set_message_payload,
-};
+use vsomeip_sys::safe_glue::{get_data_safe, get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_payload, get_pinned_runtime, offer_single_event_safe, set_data_safe, set_message_payload};
 use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::{message_type_e, ANY_MAJOR};
 
@@ -190,6 +187,13 @@ pub async fn convert_umsg_to_vsomeip_msg(
                 make_payload_wrapper(get_pinned_runtime(runtime_wrapper).create_payload());
             set_data_safe(get_pinned_payload(&vsomeip_payload), &payload);
             set_message_payload(&mut vsomeip_msg, &mut vsomeip_payload);
+
+            // TODO: Remove -- For debugging
+            if log_enabled!(Trace) {
+                let vsomeip_payload_read = get_message_payload(&mut vsomeip_msg);
+                let payload_bytes = get_data_safe(&*vsomeip_payload_read);
+                trace!("After setting vsomeip payload and retrieving, it is: {payload_bytes:?}");
+            }
 
             let request_id = get_pinned_message_base(&vsomeip_msg).get_request();
             let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
