@@ -6,11 +6,7 @@ use vsomeip_sys::extern_callback_wrappers::{AvailabilityHandlerFnPtr, MessageHan
 use vsomeip_sys::glue::{
     make_application_wrapper, make_message_wrapper, make_payload_wrapper, make_runtime_wrapper,
 };
-use vsomeip_sys::safe_glue::{
-    get_pinned_application, get_pinned_message_base, get_pinned_payload, get_pinned_runtime,
-    register_availability_handler_fn_ptr_safe, register_message_handler_fn_ptr_safe,
-    request_single_event_safe, set_data_safe,
-};
+use vsomeip_sys::safe_glue::{get_data_safe, get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_payload, get_pinned_runtime, register_availability_handler_fn_ptr_safe, register_message_handler_fn_ptr_safe, register_subscription_status_handler_fn_ptr_safe, request_single_event_safe, set_data_safe};
 use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::{instance_t, message, runtime, service_t, ANY_MAJOR, ANY_MINOR};
 

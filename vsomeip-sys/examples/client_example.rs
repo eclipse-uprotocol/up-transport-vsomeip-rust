@@ -6,10 +6,7 @@ use vsomeip_sys::extern_callback_wrappers::AvailabilityHandlerFnPtr;
 use vsomeip_sys::glue::{
     make_application_wrapper, make_message_wrapper, make_payload_wrapper, make_runtime_wrapper,
 };
-use vsomeip_sys::safe_glue::{
-    get_pinned_application, get_pinned_message_base, get_pinned_payload, get_pinned_runtime,
-    register_availability_handler_fn_ptr_safe, set_data_safe,
-};
+use vsomeip_sys::safe_glue::{get_pinned_application, get_pinned_message_base, get_pinned_payload, get_pinned_runtime, register_availability_handler_fn_ptr_safe, set_data_safe, set_message_payload};
 use vsomeip_sys::vsomeip::{instance_t, runtime, service_t};
 
 const SAMPLE_SERVICE_ID: u16 = 0x1234;
@@ -79,12 +76,12 @@ fn main() {
         vsomeip_sys::vsomeip::ANY_MINOR,
     );
 
-    let request = make_message_wrapper(get_pinned_runtime(&runtime_wrapper).create_request(true));
+    let mut request = make_message_wrapper(get_pinned_runtime(&runtime_wrapper).create_request(true));
     get_pinned_message_base(&request).set_service(SAMPLE_SERVICE_ID);
     get_pinned_message_base(&request).set_instance(SAMPLE_INSTANCE_ID);
     get_pinned_message_base(&request).set_method(SAMPLE_METHOD_ID);
 
-    let payload_wrapper =
+    let mut payload_wrapper =
         make_payload_wrapper(get_pinned_runtime(&runtime_wrapper).create_payload());
 
     let mut payload_data: Vec<u8> = Vec::new();
@@ -93,6 +90,7 @@ fn main() {
     }
 
     set_data_safe(get_pinned_payload(&payload_wrapper), &payload_data);
+    set_message_payload(&mut request, &mut payload_wrapper);
 
     let shared_ptr_message = request.as_ref().unwrap().get_shared_ptr();
     println!("attempting send...");
