@@ -206,6 +206,8 @@ pub fn get_data_safe(payload_wrapper: &PayloadWrapper) -> Vec<u8> {
     // Convert the slice to a Vec
     let data_vec: Vec<u8> = data_slice.to_vec();
 
+    trace!("after conversion to vec: {data_vec:?}");
+
     data_vec
 }
 
