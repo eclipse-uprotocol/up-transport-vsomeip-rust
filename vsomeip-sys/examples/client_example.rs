@@ -76,40 +76,31 @@ fn main() {
         vsomeip_sys::vsomeip::ANY_MINOR,
     );
 
-    let mut request = make_message_wrapper(get_pinned_runtime(&runtime_wrapper).create_request(true));
-    get_pinned_message_base(&request).set_service(SAMPLE_SERVICE_ID);
-    get_pinned_message_base(&request).set_instance(SAMPLE_INSTANCE_ID);
-    get_pinned_message_base(&request).set_method(SAMPLE_METHOD_ID);
 
-    let mut payload_wrapper =
-        make_payload_wrapper(get_pinned_runtime(&runtime_wrapper).create_payload());
+    loop {
+        sleep(Duration::from_millis(1000));
 
-    let mut payload_data: Vec<u8> = Vec::new();
-    for i in 0..10 {
-        payload_data.push((i as u16 % 256) as u8);
+        let mut request = make_message_wrapper(get_pinned_runtime(&runtime_wrapper).create_request(true));
+        get_pinned_message_base(&request).set_service(SAMPLE_SERVICE_ID);
+        get_pinned_message_base(&request).set_instance(SAMPLE_INSTANCE_ID);
+        get_pinned_message_base(&request).set_method(SAMPLE_METHOD_ID);
+
+        let mut payload_wrapper =
+            make_payload_wrapper(get_pinned_runtime(&runtime_wrapper).create_payload());
+
+        // let mut payload_data: Vec<u8> = Vec::new();
+        // for i in 0..10 {
+        //     payload_data.push((i as u16 % 256) as u8);
+        // }
+
+        let payload_string = "Hello, vsomeip!";
+        let payload_data = payload_string.as_bytes();
+
+        set_data_safe(get_pinned_payload(&payload_wrapper), &payload_data);
+        set_message_payload(&mut request, &mut payload_wrapper);
+
+        let shared_ptr_message = request.as_ref().unwrap().get_shared_ptr();
+        println!("attempting send...");
+        get_pinned_application(&app_wrapper).send(shared_ptr_message);
     }
-
-    set_data_safe(get_pinned_payload(&payload_wrapper), &payload_data);
-    set_message_payload(&mut request, &mut payload_wrapper);
-
-    let shared_ptr_message = request.as_ref().unwrap().get_shared_ptr();
-    println!("attempting send...");
-    get_pinned_application(&app_wrapper).send(shared_ptr_message);
-
-    let request = make_message_wrapper(get_pinned_runtime(&runtime_wrapper).create_request(true));
-    get_pinned_message_base(&request).set_service(SAMPLE_SERVICE_ID);
-    get_pinned_message_base(&request).set_instance(SAMPLE_INSTANCE_ID);
-    get_pinned_message_base(&request).set_method(SAMPLE_METHOD_ID);
-    let shared_ptr_message = request.as_ref().unwrap().get_shared_ptr();
-    println!("attempting send...");
-    get_pinned_application(&app_wrapper).send(shared_ptr_message);
-
-    sleep(Duration::from_millis(10000));
-
-    get_pinned_application(&app_wrapper).unregister_availability_handler(
-        SAMPLE_SERVICE_ID,
-        SAMPLE_INSTANCE_ID,
-        vsomeip_sys::vsomeip::ANY_MAJOR,
-        vsomeip_sys::vsomeip::ANY_MINOR,
-    )
 }

@@ -2,6 +2,7 @@ use cxx::{let_cxx_string, SharedPtr};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
+use log::error;
 use vsomeip_sys::glue::{make_application_wrapper, make_message_wrapper, make_runtime_wrapper};
 use vsomeip_sys::safe_glue::{get_data_safe, get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_runtime, register_message_handler_fn_ptr_safe};
 use vsomeip_sys::vsomeip::{message, runtime};
@@ -64,7 +65,17 @@ fn main() {
         let payload_wrapper = get_message_payload(&mut msg_wrapper);
         let payload = get_data_safe(&payload_wrapper);
 
-        println!("payload:\n{payload:?}")
+        println!("payload:\n{payload:?}");
+
+        let payload_string = std::str::from_utf8(&payload);
+        match payload_string {
+            Ok(str) => {
+                println!("payload_string: {str}");
+            }
+            Err(err) => {
+                error!("unable to convert bytes to string: {err:?}");
+            }
+        }
     }
     let my_callback = MessageHandlerFnPtr(my_msg_handler);
 

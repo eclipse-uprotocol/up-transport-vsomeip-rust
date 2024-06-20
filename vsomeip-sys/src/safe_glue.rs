@@ -25,7 +25,7 @@ use crate::unsafe_fns::create_payload_wrapper;
 use crate::vsomeip::message_base;
 use crate::vsomeip::{application, message, payload, runtime};
 use cxx::UniquePtr;
-use log::trace;
+use log::{error, trace};
 use std::pin::Pin;
 use std::slice;
 
@@ -193,7 +193,7 @@ pub fn get_data_safe(payload_wrapper: &PayloadWrapper) -> Vec<u8> {
         trace!("get_data_safe: data_ptr is null");
         return Vec::new();
     }
-    trace!("get_data_safe: data_ptr is not null");
+    trace!("get_data_safe: data_ptr is not null: {data_ptr:?}");
 
     trace!("Before slice::from_raw_parts");
 
@@ -251,13 +251,18 @@ pub fn set_message_payload(
 pub fn get_message_payload(
     message_wrapper: &mut UniquePtr<MessageWrapper>,
 ) -> UniquePtr<PayloadWrapper> {
-    unsafe {
         if message_wrapper.is_null() {
             eprintln!("message_wrapper is null");
             return cxx::UniquePtr::null();
         }
 
-        let message_pin = Pin::new_unchecked(message_wrapper.as_mut().unwrap());
+        // let message_pin = Pin::new_unchecked(message_wrapper.as_mut().unwrap());
+        let message_wrapper = message_wrapper.as_mut();
+        let Some(message_wrapper_pin) = message_wrapper else {
+            error!("Unable to get pinned message wrapper");
+            return UniquePtr::null();
+        };
+        let message_pin = unsafe {Pin::new_unchecked(message_wrapper_pin)};
         let message_ptr = MessageWrapper::get_mut(&message_pin) as *const message;
 
         // TODO: Should handle by returning None instead of a null pointer
@@ -266,7 +271,7 @@ pub fn get_message_payload(
             return UniquePtr::null();
         }
 
-        let payload_ptr = get_payload_raw(message_ptr);
+        let payload_ptr = unsafe {get_payload_raw(message_ptr)};
 
         if (payload_ptr as *const ()).is_null() {
             eprintln!("payload_ptr is null");
@@ -274,7 +279,7 @@ pub fn get_message_payload(
         }
 
         // Use the intermediate function to create a UniquePtr<PayloadWrapper>
-        let payload_wrapper = create_payload_wrapper(payload_ptr);
+        let payload_wrapper = unsafe {create_payload_wrapper(payload_ptr)};
 
         if payload_wrapper.is_null() {
             eprintln!("Failed to create UniquePtr<PayloadWrapper>");
@@ -283,7 +288,6 @@ pub fn get_message_payload(
         }
 
         payload_wrapper
-    }
 }
 
 /// Requests a single [eventgroup_t][crate::vsomeip::eventgroup_t] for the application

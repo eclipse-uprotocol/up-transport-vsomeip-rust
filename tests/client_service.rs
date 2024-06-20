@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
-use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UStatus, UTransport, UUri};
+use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
 
 pub struct ResponseListener {
@@ -40,6 +40,23 @@ impl ResponseListener {
 impl UListener for ResponseListener {
     async fn on_receive(&self, msg: UMessage) {
         info!("Received Response:\n{:?}", msg);
+
+        let payload = {
+            match msg.payload {
+                None => {
+                    panic!("Unable to retrieve bytes")
+                }
+                Some(payload) => {payload}
+            }
+        };
+
+        let payload_bytes = payload.to_vec();
+        println!("Received response payload_bytes of: {payload_bytes:?}");
+        let Ok(response_payload_string) = std::str::from_utf8(&payload_bytes) else {
+            panic!("unable to convert payload_bytes to string");
+        };
+        println!("Response payload_string: {response_payload_string}");
+
         self.received_response.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -72,9 +89,28 @@ impl UListener for RequestListener {
         self.received_request.fetch_add(1, Ordering::SeqCst);
         info!("Received Request:\n{:?}", msg);
 
+        let payload = {
+            match msg.payload {
+                None => {
+                    panic!("Unable to retrieve bytes")
+                }
+                Some(payload) => {payload}
+            }
+        };
+
+        let payload_bytes = payload.to_vec();
+        println!("Received request payload_bytes of: {payload_bytes:?}");
+        let Ok(payload_string) = std::str::from_utf8(&payload_bytes) else {
+            panic!("Unable to unpack string from payload_bytes");
+        };
+        println!("Request payload_string: {payload_string}");
+
+        let response_payload_string = format!("Here's a response to: {payload_string}");
+        let response_payload_bytes = response_payload_string.into_bytes();
+
         let response_msg = UMessageBuilder::response_for_request(&msg.attributes)
             .with_comm_status(UCode::OK.value())
-            .build();
+            .build_with_payload(response_payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
         let Ok(response_msg) = response_msg else {
             panic!(
                 "Unable to create response_msg: {:?}",
@@ -211,10 +247,15 @@ async fn client_service() {
     let start_time = Instant::now();
 
     let mut iterations = 0;
+    // let iterations_to_run = 1;
+    let mut i = 20;
+    // while iterations < iterations_to_run {
     while Instant::now().duration_since(start_time) < duration {
+        let payload_string = format!("request@i={i}");
+        let payload = payload_string.into_bytes();
         let request_msg_res_1_a =
             UMessageBuilder::request(service_1_uuri_method_a.clone(), client_uuri.clone(), 10000)
-                .build();
+                .build_with_payload(payload, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
 
         let Ok(request_msg_1_a) = request_msg_res_1_a else {
             panic!(
@@ -230,6 +271,7 @@ async fn client_service() {
         }
 
         iterations += 1;
+        i += 1;
     }
 
     tokio::time::sleep(Duration::from_millis(2000)).await;

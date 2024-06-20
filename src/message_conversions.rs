@@ -208,6 +208,9 @@ pub async fn convert_umsg_to_vsomeip_msg(
                 request_id, client_id, session_id, service_id, instance_id, method_id, interface_version, app_client_id
             );
 
+            let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
+            get_pinned_application(application_wrapper).send(shared_ptr_message);
+
             Ok(vsomeip_msg)
         }
         UMessageType::UMESSAGE_TYPE_RESPONSE => {
@@ -297,6 +300,9 @@ pub async fn convert_umsg_to_vsomeip_msg(
                 service_id,
                 instance_id
             );
+
+            let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
+            get_pinned_application(application_wrapper).send(shared_ptr_message);
 
             Ok(vsomeip_msg)
         }

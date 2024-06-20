@@ -27,10 +27,7 @@ use vsomeip_sys::extern_callback_wrappers::MessageHandlerFnPtr;
 use vsomeip_sys::glue::{
     make_application_wrapper, make_runtime_wrapper, ApplicationWrapper, RuntimeWrapper,
 };
-use vsomeip_sys::safe_glue::{
-    get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_runtime,
-    register_message_handler_fn_ptr_safe, request_single_event_safe,
-};
+use vsomeip_sys::safe_glue::{get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_runtime, register_message_handler_fn_ptr_safe, request_single_event_safe};
 use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::{ANY_MAJOR, ANY_MINOR};
 
@@ -806,34 +803,42 @@ impl UPTransportVsomeip {
                 );
             }
             UMessageType::UMESSAGE_TYPE_REQUEST | UMessageType::UMESSAGE_TYPE_RESPONSE => {
-                let vsomeip_msg_res =
+                let _vsomeip_msg_res =
                     convert_umsg_to_vsomeip_msg(&umsg, application_wrapper, runtime_wrapper).await;
 
-                let Ok(vsomeip_msg) = vsomeip_msg_res else {
-                    let err = vsomeip_msg_res.err().unwrap();
-                    error!(
-                        "{}:{} Converting UMessage to vsomeip message failed: {:?}",
-                        UP_CLIENT_VSOMEIP_TAG, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, err
-                    );
-                    return Err(err);
-                };
-                let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
-                let instance_id = get_pinned_message_base(&vsomeip_msg).get_instance();
-                let method_id = get_pinned_message_base(&vsomeip_msg).get_method();
-                let _interface_version =
-                    get_pinned_message_base(&vsomeip_msg).get_interface_version();
-
-                trace!(
-                    "{}:{} Sending SOME/IP message with service: {} instance: {} method: {}",
-                    UP_CLIENT_VSOMEIP_TAG,
-                    UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
-                    service_id,
-                    instance_id,
-                    method_id
-                );
-
-                let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
-                get_pinned_application(application_wrapper).send(shared_ptr_message);
+                // TODO: For some reason the payload which is attached within convert_umsg_to_vsomeip_msg
+                //  appears to be invalid when returned, perhaps because we're passing the pinned
+                //  value out of where it was allocated on the stack? In any case, for now we
+                //  will send from within convert_umsg_to_vsomeip_msg
+                // let Ok(mut vsomeip_msg) = vsomeip_msg_res else {
+                //     let err = vsomeip_msg_res.err().unwrap();
+                //     error!(
+                //         "{}:{} Converting UMessage to vsomeip message failed: {:?}",
+                //         UP_CLIENT_VSOMEIP_TAG, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, err
+                //     );
+                //     return Err(err);
+                // };
+                // let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
+                // let instance_id = get_pinned_message_base(&vsomeip_msg).get_instance();
+                // let method_id = get_pinned_message_base(&vsomeip_msg).get_method();
+                // let _interface_version =
+                //     get_pinned_message_base(&vsomeip_msg).get_interface_version();
+                //
+                // trace!(
+                //     "{}:{} Sending SOME/IP message with service: {} instance: {} method: {}",
+                //     UP_CLIENT_VSOMEIP_TAG,
+                //     UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
+                //     service_id,
+                //     instance_id,
+                //     method_id
+                // );
+                //
+                // let payload_wrapper = get_message_payload(&mut vsomeip_msg);
+                // let payload = get_data_safe(&payload_wrapper);
+                // trace!("immediately before calling vsomeip send, here's the payload: {payload:?}");
+                //
+                // let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
+                // get_pinned_application(application_wrapper).send(shared_ptr_message);
             }
         }
         Ok(())
