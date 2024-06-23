@@ -18,7 +18,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
-use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri};
+use up_rust::{
+    UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri,
+};
 use up_transport_vsomeip::UPTransportVsomeip;
 
 pub struct ResponseListener {
@@ -46,7 +48,7 @@ impl UListener for ResponseListener {
                 None => {
                     panic!("Unable to retrieve bytes")
                 }
-                Some(payload) => {payload}
+                Some(payload) => payload,
             }
         };
 
@@ -94,7 +96,7 @@ impl UListener for RequestListener {
                 None => {
                     panic!("Unable to retrieve bytes")
                 }
-                Some(payload) => {payload}
+                Some(payload) => payload,
             }
         };
 

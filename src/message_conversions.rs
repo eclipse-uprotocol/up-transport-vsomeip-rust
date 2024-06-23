@@ -18,17 +18,21 @@ use crate::{
 };
 use cxx::UniquePtr;
 use lazy_static::lazy_static;
+use log::Level::Trace;
 use log::{log_enabled, trace};
 use protobuf::Enum;
 use std::collections::HashSet;
 use std::time::Duration;
-use log::Level::Trace;
 use tokio::sync::RwLock;
 use up_rust::{UCode, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UStatus, UUri};
 use vsomeip_sys::glue::{
     make_message_wrapper, make_payload_wrapper, ApplicationWrapper, MessageWrapper, RuntimeWrapper,
 };
-use vsomeip_sys::safe_glue::{get_data_safe, get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_payload, get_pinned_runtime, offer_single_event_safe, set_data_safe, set_message_payload};
+use vsomeip_sys::safe_glue::{
+    get_data_safe, get_message_payload, get_pinned_application, get_pinned_message_base,
+    get_pinned_payload, get_pinned_runtime, offer_single_event_safe, set_data_safe,
+    set_message_payload,
+};
 use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::{message_type_e, ANY_MAJOR};
 
@@ -58,7 +62,7 @@ pub async fn convert_umsg_to_vsomeip_msg(
         .enum_value_or(UMessageType::UMESSAGE_TYPE_UNSPECIFIED)
     {
         UMessageType::UMESSAGE_TYPE_PUBLISH => {
-            let mut vsomeip_msg =
+            let vsomeip_msg =
                 make_message_wrapper(get_pinned_runtime(runtime_wrapper).create_notification(true));
             let (_instance_id, service_id) = split_u32_to_u16(source.ue_id);
             get_pinned_message_base(&vsomeip_msg).set_service(service_id);
@@ -78,10 +82,11 @@ pub async fn convert_umsg_to_vsomeip_msg(
                     Vec::new()
                 }
             };
-            let mut vsomeip_payload =
+            let vsomeip_payload =
                 make_payload_wrapper(get_pinned_runtime(runtime_wrapper).create_payload());
             set_data_safe(get_pinned_payload(&vsomeip_payload), &payload);
-            set_message_payload(&mut vsomeip_msg, &mut vsomeip_payload);
+            let payload = vsomeip_payload.get_shared_ptr();
+            // set_message_payload(&mut vsomeip_msg, &mut vsomeip_payload);
 
             trace!(
                 "Immediately prior to request_service: service_id: {} instance_id: {}",
@@ -114,6 +119,14 @@ pub async fn convert_umsg_to_vsomeip_msg(
             }
 
             trace!("Immediately after request_service");
+
+            get_pinned_application(application_wrapper).notify(
+                service_id,
+                instance_id,
+                event_id,
+                payload,
+                true,
+            );
 
             Ok(vsomeip_msg)
         }
@@ -421,7 +434,8 @@ pub async fn convert_vsomeip_msg_to_umsg(
                 ..Default::default()
             };
 
-            let umsg_res = UMessageBuilder::publish(source).build();
+            let umsg_res = UMessageBuilder::publish(source)
+                .build_with_payload(payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_UNSPECIFIED);
 
             let Ok(umsg) = umsg_res else {
                 return Err(UStatus::fail_with_code(

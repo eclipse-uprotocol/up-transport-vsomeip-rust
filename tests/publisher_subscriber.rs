@@ -11,15 +11,16 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-use log::trace;
+use log::{info, trace};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
-use up_rust::{UListener, UMessage, UMessageBuilder, UStatus, UTransport, UUri};
+use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
 
 const TEST_SLACK: usize = 1;
+const TEST_DURATION: u64 = 1000;
 
 pub struct SubscriberListener {
     received_publish: AtomicUsize,
@@ -41,6 +42,16 @@ impl UListener for SubscriberListener {
     async fn on_receive(&self, msg: UMessage) {
         trace!("{:?}", msg);
         self.received_publish.fetch_add(1, Ordering::SeqCst);
+
+        let Some(payload_bytes) = msg.payload else {
+            panic!("No bytes included in payload");
+        };
+
+        let Ok(payload_string) = std::str::from_utf8(&payload_bytes) else {
+            panic!("Unable to convert back to payload_string");
+        };
+
+        info!("We received payload_string: {payload_string}");
     }
 
     async fn on_error(&self, err: UStatus) {
@@ -97,12 +108,16 @@ async fn publisher_subscriber() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Track the start time and set the duration for the loop
-    let duration = Duration::from_millis(1000);
+    let duration = Duration::from_millis(TEST_DURATION);
     let start_time = Instant::now();
 
     let mut iterations = 0;
     while Instant::now().duration_since(start_time) < duration {
-        let publish_msg_res = UMessageBuilder::publish(publisher_topic.clone()).build();
+        let publish_payload_string = format!("publish_message@i={iterations}");
+        let publish_payload = publish_payload_string.into_bytes();
+
+        let publish_msg_res = UMessageBuilder::publish(publisher_topic.clone())
+            .build_with_payload(publish_payload, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
 
         let Ok(publish_msg) = publish_msg_res else {
             panic!(

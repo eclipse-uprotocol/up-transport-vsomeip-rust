@@ -27,7 +27,10 @@ use vsomeip_sys::extern_callback_wrappers::MessageHandlerFnPtr;
 use vsomeip_sys::glue::{
     make_application_wrapper, make_runtime_wrapper, ApplicationWrapper, RuntimeWrapper,
 };
-use vsomeip_sys::safe_glue::{get_message_payload, get_pinned_application, get_pinned_message_base, get_pinned_runtime, register_message_handler_fn_ptr_safe, request_single_event_safe};
+use vsomeip_sys::safe_glue::{
+    get_pinned_application, get_pinned_runtime, register_message_handler_fn_ptr_safe,
+    request_single_event_safe,
+};
 use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::{ANY_MAJOR, ANY_MINOR};
 
@@ -765,42 +768,42 @@ impl UPTransportVsomeip {
                 ));
             }
             UMessageType::UMESSAGE_TYPE_PUBLISH => {
-                let vsomeip_msg_res =
+                let _vsomeip_msg_res =
                     convert_umsg_to_vsomeip_msg(&umsg, application_wrapper, runtime_wrapper).await;
 
-                let Ok(mut vsomeip_msg) = vsomeip_msg_res else {
-                    let err = vsomeip_msg_res.err().unwrap();
-                    error!(
-                        "{}:{} Converting UMessage to vsomeip message failed: {:?}",
-                        UP_CLIENT_VSOMEIP_TAG, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, err
-                    );
-                    return Err(err);
-                };
+                // let Ok(mut vsomeip_msg) = vsomeip_msg_res else {
+                //     let err = vsomeip_msg_res.err().unwrap();
+                //     error!(
+                //         "{}:{} Converting UMessage to vsomeip message failed: {:?}",
+                //         UP_CLIENT_VSOMEIP_TAG, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, err
+                //     );
+                //     return Err(err);
+                // };
+                //
+                // let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
+                // let instance_id = get_pinned_message_base(&vsomeip_msg).get_instance();
+                // let event_id = get_pinned_message_base(&vsomeip_msg).get_method();
+                // let _interface_version =
+                //     get_pinned_message_base(&vsomeip_msg).get_interface_version();
+                //
+                // trace!(
+                //     "{}:{} Sending SOME/IP NOTIFICATION with service: {} instance: {} event: {}",
+                //     UP_CLIENT_VSOMEIP_TAG,
+                //     UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
+                //     service_id,
+                //     instance_id,
+                //     event_id
+                // );
 
-                let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
-                let instance_id = get_pinned_message_base(&vsomeip_msg).get_instance();
-                let event_id = get_pinned_message_base(&vsomeip_msg).get_method();
-                let _interface_version =
-                    get_pinned_message_base(&vsomeip_msg).get_interface_version();
-
-                trace!(
-                    "{}:{} Sending SOME/IP NOTIFICATION with service: {} instance: {} event: {}",
-                    UP_CLIENT_VSOMEIP_TAG,
-                    UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
-                    service_id,
-                    instance_id,
-                    event_id
-                );
-
-                let payload = get_message_payload(&mut vsomeip_msg).get_shared_ptr();
-                // TODO: Note that we cannot set the interface_version
-                get_pinned_application(application_wrapper).notify(
-                    service_id,
-                    instance_id,
-                    event_id,
-                    payload,
-                    true,
-                );
+                // let payload = get_message_payload(&mut vsomeip_msg).get_shared_ptr();
+                // // TODO: Note that we cannot set the interface_version
+                // get_pinned_application(application_wrapper).notify(
+                //     service_id,
+                //     instance_id,
+                //     event_id,
+                //     payload,
+                //     true,
+                // );
             }
             UMessageType::UMESSAGE_TYPE_REQUEST | UMessageType::UMESSAGE_TYPE_RESPONSE => {
                 let _vsomeip_msg_res =
