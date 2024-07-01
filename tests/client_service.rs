@@ -163,6 +163,7 @@ async fn client_service() {
 
     let client_res = UPTransportVsomeip::new_with_config(
         &client_authority_name.to_string(),
+        &"me_authority".to_string(),
         streamer_ue_id,
         &client_config.unwrap(),
     );
@@ -211,6 +212,7 @@ async fn client_service() {
 
     let service_res = UPTransportVsomeip::new_with_config(
         &service_authority_name.to_string(),
+        &"me_authority".to_string(),
         streamer_ue_id,
         &service_config.unwrap(),
     );

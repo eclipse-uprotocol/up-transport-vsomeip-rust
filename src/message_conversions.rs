@@ -11,19 +11,17 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-use crate::transport::{AUTHORITY_NAME, ME_REQUEST_CORRELATION, UE_REQUEST_CORRELATION};
-use crate::{
-    create_request_id, retrieve_session_id, split_u32_to_u16, split_u32_to_u8, EventId, InstanceId,
-    ServiceId, ME_AUTHORITY,
+use crate::rpc_correlation::{
+    insert_me_request_correlation, insert_ue_request_correlation, remove_me_request_correlation,
+    remove_ue_request_correlation, retrieve_session_id,
 };
+use crate::vsomeip_offered_requested::{insert_event_offered, is_event_offered};
+use crate::{create_request_id, split_u32_to_u16, split_u32_to_u8, AuthorityName};
 use cxx::UniquePtr;
-use lazy_static::lazy_static;
 use log::Level::Trace;
 use log::{log_enabled, trace};
 use protobuf::Enum;
-use std::collections::HashSet;
 use std::time::Duration;
-use tokio::sync::RwLock;
 use up_rust::{UCode, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UStatus, UUri};
 use vsomeip_sys::glue::{
     make_message_wrapper, make_payload_wrapper, ApplicationWrapper, MessageWrapper, RuntimeWrapper,
@@ -39,16 +37,11 @@ use vsomeip_sys::vsomeip::{message_type_e, ANY_MAJOR};
 const UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG: &str = "convert_umsg_to_vsomeip_msg";
 const UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG: &str = "convert_vsomeip_msg_to_umsg";
 
-lazy_static! {
-    static ref OFFERED_EVENTS: RwLock<HashSet<(ServiceId, InstanceId, EventId)>> =
-        RwLock::new(HashSet::new());
-}
-
-pub async fn convert_umsg_to_vsomeip_msg(
+pub async fn convert_umsg_to_vsomeip_msg_and_send(
     umsg: &UMessage,
     application_wrapper: &mut UniquePtr<ApplicationWrapper>,
     runtime_wrapper: &UniquePtr<RuntimeWrapper>,
-) -> Result<UniquePtr<MessageWrapper>, UStatus> {
+) -> Result<(), UStatus> {
     let Some(source) = umsg.attributes.source.as_ref() else {
         return Err(UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
@@ -96,26 +89,23 @@ pub async fn convert_umsg_to_vsomeip_msg(
 
             // TODO: We also need to add a corresponding stop_offer_event perhaps when we drop
             //  the UPClientVsomeip?
-            {
-                let mut offered_events = OFFERED_EVENTS.write().await;
-                if !offered_events.contains(&(service_id, instance_id, event_id)) {
-                    get_pinned_application(application_wrapper).offer_service(
-                        service_id,
-                        instance_id,
-                        ANY_MAJOR,
-                        // interface_version,
-                        vsomeip::ANY_MINOR,
-                    );
-                    offer_single_event_safe(
-                        application_wrapper,
-                        service_id,
-                        instance_id,
-                        event_id,
-                        event_id,
-                    );
-                    tokio::time::sleep(Duration::from_nanos(1)).await;
-                    offered_events.insert((service_id, instance_id, event_id));
-                }
+            if !is_event_offered(service_id, instance_id, event_id).await {
+                get_pinned_application(application_wrapper).offer_service(
+                    service_id,
+                    instance_id,
+                    ANY_MAJOR,
+                    // interface_version,
+                    vsomeip::ANY_MINOR,
+                );
+                offer_single_event_safe(
+                    application_wrapper,
+                    service_id,
+                    instance_id,
+                    event_id,
+                    event_id,
+                );
+                tokio::time::sleep(Duration::from_nanos(1)).await;
+                insert_event_offered(service_id, instance_id, event_id).await;
             }
 
             trace!("Immediately after request_service");
@@ -128,7 +118,7 @@ pub async fn convert_umsg_to_vsomeip_msg(
                 true,
             );
 
-            Ok(vsomeip_msg)
+            Ok(())
         }
         UMessageType::UMESSAGE_TYPE_REQUEST => {
             let Some(sink) = umsg.attributes.sink.as_ref() else {
@@ -175,16 +165,9 @@ pub async fn convert_umsg_to_vsomeip_msg(
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG,
                 app_request_id, req_id.to_hyphenated_string(),
             );
-            let mut ue_request_correlation = UE_REQUEST_CORRELATION.write().await;
-            if ue_request_correlation.get(&app_request_id).is_none() {
-                ue_request_correlation.insert(app_request_id, req_id.clone());
-                trace!("{} - (app_request_id, req_id)  inserted for later correlation in UE_REQUEST_CORRELATION: ({}, {})",
-                UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG,
-                    app_request_id, req_id.to_hyphenated_string(),
-                );
-            } else {
-                return Err(UStatus::fail_with_code(UCode::ALREADY_EXISTS, format!("Already exists same request with id: {app_request_id}, therefore rejecting")));
-            }
+
+            insert_ue_request_correlation(app_request_id, req_id).await?;
+
             get_pinned_message_base(&vsomeip_msg).set_return_code(vsomeip::return_code_e::E_OK);
             let payload = {
                 if let Some(bytes) = umsg.payload.clone() {
@@ -224,7 +207,7 @@ pub async fn convert_umsg_to_vsomeip_msg(
             let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
             get_pinned_application(application_wrapper).send(shared_ptr_message);
 
-            Ok(vsomeip_msg)
+            Ok(())
         }
         UMessageType::UMESSAGE_TYPE_RESPONSE => {
             trace!(
@@ -255,14 +238,9 @@ pub async fn convert_umsg_to_vsomeip_msg(
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG,
                 req_id.to_hyphenated_string()
             );
-            let mut me_request_correlation = ME_REQUEST_CORRELATION.write().await;
-            let Some(request_id) = me_request_correlation.remove(req_id) else {
-                return Err(UStatus::fail_with_code(
-                    UCode::NOT_FOUND,
-                    format!("Corresponding SOME/IP Request ID not found for this Request UMessage's reqid: {}",
-                            req_id.to_hyphenated_string()),
-                ));
-            };
+
+            let request_id = remove_me_request_correlation(&req_id).await?;
+
             trace!(
                 "{} - Found correlated request_id: {}",
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG,
@@ -317,7 +295,7 @@ pub async fn convert_umsg_to_vsomeip_msg(
             let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
             get_pinned_application(application_wrapper).send(shared_ptr_message);
 
-            Ok(vsomeip_msg)
+            Ok(())
         }
         _ => Err(UStatus::fail_with_code(
             UCode::INTERNAL,
@@ -327,6 +305,8 @@ pub async fn convert_umsg_to_vsomeip_msg(
 }
 
 pub async fn convert_vsomeip_msg_to_umsg(
+    authority_name: &AuthorityName,
+    mechatronics_authority_name: &AuthorityName,
     vsomeip_message: &mut UniquePtr<MessageWrapper>,
     _application_wrapper: &UniquePtr<ApplicationWrapper>,
     _runtime_wrapper: &UniquePtr<RuntimeWrapper>,
@@ -349,15 +329,13 @@ pub async fn convert_vsomeip_msg_to_umsg(
         request_id, client_id, session_id, service_id, instance_id, method_id, interface_version, payload_bytes
     );
 
-    let authority_name = { AUTHORITY_NAME.lock().await.clone() };
-
     trace!("unloaded all relevant info from vsomeip message");
 
     match msg_type {
         message_type_e::MT_REQUEST => {
             trace!("MT_REQUEST type");
             let sink = UUri {
-                authority_name,
+                authority_name: authority_name.to_string(),
                 ue_id: service_id as u32,
                 ue_version_major: interface_version as u32,
                 resource_id: method_id as u32,
@@ -365,7 +343,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
             };
 
             let source = UUri {
-                authority_name: ME_AUTHORITY.to_string(), // TODO: Should we set this to anything specific?
+                authority_name: mechatronics_authority_name.to_string(), // TODO: Should we set this to anything specific?
                 ue_id: client_id as u32,
                 ue_version_major: 1, // TODO: I don't see a way to get this
                 resource_id: 0,      // set to 0 as this is the resource_id of "me"
@@ -373,9 +351,6 @@ pub async fn convert_vsomeip_msg_to_umsg(
             };
 
             // TODO: Not sure where to get this
-            //  Steven said Ivan posted something to a Slack thread; need to check
-            //  Hmm, didn't find this. Asked Steven for help
-            //  He pointed me to something about SOME/IP-SD, but not Request AFAICT
             let ttl = 1000;
 
             trace!("Prior to building Request");
@@ -402,21 +377,8 @@ pub async fn convert_vsomeip_msg_to_umsg(
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
                 req_id.to_hyphenated_string(), request_id
             );
-            let mut me_request_correlation = ME_REQUEST_CORRELATION.write().await;
-            if me_request_correlation.get(req_id).is_none() {
-                trace!("{} - (req_id, request_id) to store for later correlation in ME_REQUEST_CORRELATION: ({}, {})",
-                    UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
-                    req_id.to_hyphenated_string(), request_id
-                );
-                me_request_correlation.insert(req_id.clone(), request_id);
-            } else {
-                return Err(UStatus::fail_with_code(
-                    UCode::ALREADY_EXISTS,
-                    format!(
-                        "Already exists same MT_REQUEST with id: {req_id}, therefore rejecting"
-                    ),
-                ));
-            }
+
+            insert_me_request_correlation(req_id.clone(), request_id).await?;
 
             Ok(umsg)
         }
@@ -427,7 +389,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
             //  interface_version... going to set this manually to 1 for now
             let interface_version = 1;
             let source = UUri {
-                authority_name: ME_AUTHORITY.to_string(), // TODO: Should we set this to anything specific?
+                authority_name: mechatronics_authority_name.to_string(), // TODO: Should we set this to anything specific?
                 ue_id: service_id as u32,
                 ue_version_major: interface_version as u32,
                 resource_id: method_id as u32,
@@ -452,7 +414,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
         message_type_e::MT_RESPONSE => {
             trace!("MT_RESPONSE type");
             let sink = UUri {
-                authority_name,
+                authority_name: authority_name.to_string(),
                 ue_id: client_id as u32,
                 ue_version_major: 1, // TODO: I don't see a way to get this
                 resource_id: 0,      // set to 0 as this is the resource_id of "me"
@@ -460,7 +422,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
             };
 
             let source = UUri {
-                authority_name: ME_AUTHORITY.to_string(), // TODO: Should we set this to anything specific?
+                authority_name: mechatronics_authority_name.to_string(), // TODO: Should we set this to anything specific?
                 ue_id: service_id as u32,
                 ue_version_major: interface_version as u32,
                 resource_id: method_id as u32,
@@ -472,16 +434,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
                 request_id
             );
-            let mut ue_request_correlation = UE_REQUEST_CORRELATION.write().await;
-            let Some(req_id) = ue_request_correlation.remove(&request_id) else {
-                return Err(UStatus::fail_with_code(
-                    UCode::NOT_FOUND,
-                    format!(
-                        "Corresponding reqid not found for this SOME/IP RESPONSE: {}",
-                        request_id
-                    ),
-                ));
-            };
+            let req_id = remove_ue_request_correlation(request_id).await?;
 
             let umsg_res = UMessageBuilder::response(sink, req_id, source)
                 .with_comm_status(UCode::OK.value())
@@ -499,7 +452,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
         message_type_e::MT_ERROR => {
             trace!("MT_ERROR type");
             let sink = UUri {
-                authority_name,
+                authority_name: authority_name.to_string(),
                 ue_id: client_id as u32,
                 ue_version_major: 1, // TODO: I don't see a way to get this
                 resource_id: 0,      // set to 0 as this is the resource_id of "me"
@@ -507,7 +460,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
             };
 
             let source = UUri {
-                authority_name: ME_AUTHORITY.to_string(), // TODO: Should we set this to anything specific?
+                authority_name: mechatronics_authority_name.to_string(), // TODO: Should we set this to anything specific?
                 ue_id: service_id as u32,
                 ue_version_major: interface_version as u32,
                 resource_id: method_id as u32,
@@ -519,16 +472,7 @@ pub async fn convert_vsomeip_msg_to_umsg(
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
                 request_id
             );
-            let mut ue_request_correlation = UE_REQUEST_CORRELATION.write().await;
-            let Some(req_id) = ue_request_correlation.remove(&request_id) else {
-                return Err(UStatus::fail_with_code(
-                    UCode::NOT_FOUND,
-                    format!(
-                        "Corresponding reqid not found for this SOME/IP RESPONSE: {}",
-                        request_id
-                    ),
-                ));
-            };
+            let req_id = remove_ue_request_correlation(request_id).await?;
 
             let umsg_res = UMessageBuilder::response(sink, req_id, source)
                 .with_comm_status(UCode::INTERNAL.value())

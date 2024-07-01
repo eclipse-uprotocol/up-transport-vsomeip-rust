@@ -78,7 +78,11 @@ async fn publisher_subscriber() {
         ..Default::default()
     };
 
-    let subscriber_res = UPTransportVsomeip::new(&authority_name.to_string(), subscriber_ue_id);
+    let subscriber_res = UPTransportVsomeip::new(
+        &authority_name.to_string(),
+        &"me_authority".to_string(),
+        subscriber_ue_id,
+    );
 
     let Ok(subscriber) = subscriber_res else {
         panic!("Unable to establish subscriber");
@@ -99,7 +103,11 @@ async fn publisher_subscriber() {
 
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
-    let publisher_res = UPTransportVsomeip::new(&authority_name.to_string(), ue_id);
+    let publisher_res = UPTransportVsomeip::new(
+        &authority_name.to_string(),
+        &"me_authority".to_string(),
+        ue_id,
+    );
 
     let Ok(publisher) = publisher_res else {
         panic!("Unable to establish publisher");

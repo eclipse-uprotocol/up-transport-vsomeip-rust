@@ -63,16 +63,14 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
 
     let expanded = quote! {
 
-
         lazy_static! {
-            pub(crate) static ref FREE_LISTENER_IDS: RwLock<HashSet<usize>> = {
+            static ref FREE_LISTENER_IDS: RwLock<HashSet<usize>> = {
                 #free_listener_ids_init
                 RwLock::new(set)
             };
         }
 
         #generated_fns
-
 
         fn call_shared_extern_fn(listener_id: usize, vsomeip_msg: &SharedPtr<vsomeip::message>) {
             // Ensure the runtime is initialized and get a handle to it
@@ -91,7 +89,7 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
             // Use the runtime to run the async function within the LocalSet
             local_set.spawn_local(async move {
                 let app_name = {
-                    let listener_client_id_mapping = LISTENER_CLIENT_ID_MAPPING.read().await;
+                    let listener_client_id_mapping = LISTENER_ID_CLIENT_ID_MAPPING.read().await;
                     if let Some(client_id) = listener_client_id_mapping.get(&listener_id) {
                         let client_id_app_mapping = CLIENT_ID_APP_MAPPING.read().await;
                         if let Some(app_name) = client_id_app_mapping.get(&client_id) {
@@ -124,7 +122,17 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
 
                 trace!("Made vsomeip_msg_wrapper");
 
-                let res = convert_vsomeip_msg_to_umsg(&mut vsomeip_msg_wrapper, &application_wrapper, &runtime_wrapper).await;
+                let listener_id_authority_name = LISTENER_ID_AUTHORITY_NAME.read().await;
+                let Some(authority_name) = listener_id_authority_name.get(&listener_id) else {
+                    error!("No authority_name found for listener_id: {listener_id}");
+                    return;
+                };
+                let listener_id_remote_authority_name = LISTENER_ID_REMOTE_AUTHORITY_NAME.read().await;
+                let Some(remote_authority_name) = listener_id_remote_authority_name.get(&listener_id) else {
+                    error!("No remote_authority_name found for listener_id: {listener_id}");
+                    return;
+                };
+                let res = convert_vsomeip_msg_to_umsg(&authority_name, &remote_authority_name, &mut vsomeip_msg_wrapper, &application_wrapper, &runtime_wrapper).await;
 
                 trace!("Ran convert_vsomeip_msg_to_umsg");
 
@@ -178,7 +186,7 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
             listener.on_receive(umsg).await;
         }
 
-        fn get_extern_fn(listener_id: usize) -> extern "C" fn(&SharedPtr<vsomeip::message>) {
+        pub(crate) fn get_extern_fn(listener_id: usize) -> extern "C" fn(&SharedPtr<vsomeip::message>) {
             trace!("get_extern_fn with listener_id: {}", listener_id);
             match listener_id {
                 #(#match_arms)*

@@ -12,9 +12,7 @@
  ********************************************************************************/
 
 use cxx::{let_cxx_string, UniquePtr};
-use lazy_static::lazy_static;
 use log::{error, info, trace};
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -35,17 +33,23 @@ use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::{ANY_MAJOR, ANY_MINOR};
 
 pub mod transport;
-use transport::CLIENT_ID_APP_MAPPING;
 
 mod message_conversions;
-use message_conversions::convert_umsg_to_vsomeip_msg;
+use message_conversions::convert_umsg_to_vsomeip_msg_and_send;
 
 mod determinations;
-use determinations::{
-    create_request_id, find_app_name, retrieve_session_id, split_u32_to_u16, split_u32_to_u8,
-};
 
+mod listener_registry;
+use listener_registry::find_app_name;
+mod rpc_correlation;
 mod vsomeip_config;
+mod vsomeip_offered_requested;
+
+use crate::listener_registry::add_client_id_app_name;
+use crate::vsomeip_offered_requested::{
+    insert_event_requested, insert_service_offered, insert_service_requested, is_event_requested,
+    is_service_offered, is_service_requested,
+};
 
 const UP_CLIENT_VSOMEIP_TAG: &str = "UPClientVsomeip";
 const UP_CLIENT_VSOMEIP_FN_TAG_NEW_INTERNAL: &str = "new_internal";
@@ -56,16 +60,47 @@ const UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL: &str = "send_internal";
 const UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL: &str = "initialize_new_app_internal";
 const UP_CLIENT_VSOMEIP_FN_TAG_START_APP: &str = "start_app";
 
-// TODO: Revisit what authority to attach, if any, to the remote mE. For now, just assign "me_authority"
-const ME_AUTHORITY: &str = "me_authority";
+// TODO: use function from up-rust when merged
+pub(crate) fn any_uuri() -> UUri {
+    UUri {
+        authority_name: "*".to_string(),
+        ue_id: 0x0000_FFFF,     // any instance, any service
+        ue_version_major: 0xFF, // any
+        resource_id: 0xFFFF,    // any
+        ..Default::default()
+    }
+}
 
-lazy_static! {
-    static ref OFFERED_SERVICES: RwLock<HashSet<(ServiceId, InstanceId, MethodId)>> =
-        RwLock::new(HashSet::new());
-    static ref REQUESTED_SERVICES: RwLock<HashSet<(ServiceId, InstanceId, MethodId)>> =
-        RwLock::new(HashSet::new());
-    static ref REQUESTED_EVENTS: RwLock<HashSet<(ServiceId, InstanceId, MethodId)>> =
-        RwLock::new(HashSet::new());
+// TODO: upstream into up-rust
+pub(crate) fn any_uuri_fixed_authority_id(authority_name: &AuthorityName, ue_id: UeId) -> UUri {
+    UUri {
+        authority_name: authority_name.to_string(),
+        ue_id: ue_id as u32,
+        ue_version_major: 0xFF, // any
+        resource_id: 0xFFFF,    // any
+        ..Default::default()
+    }
+}
+
+// TODO: upstream this into up-rust
+pub(crate) fn split_u32_to_u16(value: u32) -> (u16, u16) {
+    let most_significant_bits = (value >> 16) as u16;
+    let least_significant_bits = (value & 0xFFFF) as u16;
+    (most_significant_bits, least_significant_bits)
+}
+
+// TODO: upstream this into up-rust
+pub(crate) fn split_u32_to_u8(value: u32) -> (u8, u8, u8, u8) {
+    let byte1 = (value >> 24) as u8;
+    let byte2 = (value >> 16 & 0xFF) as u8;
+    let byte3 = (value >> 8 & 0xFF) as u8;
+    let byte4 = (value & 0xFF) as u8;
+    (byte1, byte2, byte3, byte4)
+}
+
+// TODO: upstream this into up-rust
+pub(crate) fn create_request_id(client_id: ClientId, session_id: SessionId) -> RequestId {
+    ((client_id as u32) << 16) | (session_id as u32)
 }
 
 enum TransportCommand {
@@ -128,14 +163,9 @@ impl RegistrationType {
 }
 
 pub struct UPTransportVsomeip {
-    // we're going to be using this for error messages, so suppress this warning for now
-    #[allow(dead_code)]
     authority_name: AuthorityName,
-    // we're going to be using this for error messages, so suppress this warning for now
-    #[allow(dead_code)]
+    remote_authority_name: AuthorityName,
     ue_id: UeId,
-    // we're going to be using this for error messages, so suppress this warning for now
-    #[allow(dead_code)]
     config_path: Option<PathBuf>,
     // if this is not None, indicates that we are in a dedicated point-to-point mode
     point_to_point_listener: RwLock<Option<Arc<dyn UListener>>>,
@@ -145,6 +175,7 @@ pub struct UPTransportVsomeip {
 impl UPTransportVsomeip {
     pub fn new_with_config(
         authority_name: &AuthorityName,
+        remote_authority_name: &AuthorityName,
         ue_id: UeId,
         config_path: &Path,
     ) -> Result<Self, UStatus> {
@@ -154,15 +185,25 @@ impl UPTransportVsomeip {
                 format!("Configuration file not found at: {:?}", config_path),
             ));
         }
-        Self::new_internal(authority_name, ue_id, Some(config_path))
+        Self::new_internal(
+            authority_name,
+            remote_authority_name,
+            ue_id,
+            Some(config_path),
+        )
     }
 
-    pub fn new(authority_name: &AuthorityName, ue_id: UeId) -> Result<Self, UStatus> {
-        Self::new_internal(authority_name, ue_id, None)
+    pub fn new(
+        authority_name: &AuthorityName,
+        remote_authority_name: &AuthorityName,
+        ue_id: UeId,
+    ) -> Result<Self, UStatus> {
+        Self::new_internal(authority_name, remote_authority_name, ue_id, None)
     }
 
     fn new_internal(
         authority_name: &AuthorityName,
+        remote_authority_name: &AuthorityName,
         ue_id: UeId,
         config_path: Option<&Path>,
     ) -> Result<Self, UStatus> {
@@ -182,6 +223,7 @@ impl UPTransportVsomeip {
 
         Ok(Self {
             authority_name: authority_name.to_string(),
+            remote_authority_name: remote_authority_name.to_string(),
             ue_id,
             tx_to_event_loop: tx,
             point_to_point_listener: None.into(),
@@ -424,22 +466,8 @@ impl UPTransportVsomeip {
                         continue;
                     }
 
-                    let mut client_id_app_mapping = CLIENT_ID_APP_MAPPING.write().await;
-                    if let std::collections::hash_map::Entry::Vacant(e) =
-                        client_id_app_mapping.entry(client_id)
-                    {
-                        e.insert(app_name.clone());
-                        trace!(
-                            "Inserted client_id: {} and app_name: {} into CLIENT_ID_APP_MAPPING",
-                            client_id,
-                            app_name
-                        );
-                        Self::return_oneshot_result(Ok(()), return_channel).await;
-                    } else {
-                        let err_msg = format!("Already had key. Somehow we already had an application running for client_id: {}", client_id);
-                        let err = UStatus::fail_with_code(UCode::ALREADY_EXISTS, err_msg);
-                        Self::return_oneshot_result(Err(err), return_channel).await;
-                    }
+                    let add_res = add_client_id_app_name(client_id, &app_name).await;
+                    Self::return_oneshot_result(add_res, return_channel).await;
                 }
             }
             trace!("Hit bottom of event loop");
@@ -483,31 +511,30 @@ impl UPTransportVsomeip {
                     event_id
                 );
 
-                {
-                    let requested_events = REQUESTED_EVENTS.write().await;
-                    if !requested_events.contains(&(service_id, instance_id, event_id)) {
-                        get_pinned_application(application_wrapper).request_service(
-                            service_id,
-                            instance_id,
-                            ANY_MAJOR,
-                            vsomeip::ANY_MINOR,
-                        );
-                        request_single_event_safe(
-                            application_wrapper,
-                            service_id,
-                            instance_id,
-                            event_id,
-                            event_id,
-                        );
-                        get_pinned_application(application_wrapper).subscribe(
-                            service_id,
-                            instance_id,
-                            event_id,
-                            ANY_MAJOR,
-                            event_id,
-                        );
-                    }
+                if !is_event_requested(service_id, instance_id, event_id).await {
+                    get_pinned_application(application_wrapper).request_service(
+                        service_id,
+                        instance_id,
+                        ANY_MAJOR,
+                        vsomeip::ANY_MINOR,
+                    );
+                    request_single_event_safe(
+                        application_wrapper,
+                        service_id,
+                        instance_id,
+                        event_id,
+                        event_id,
+                    );
+                    get_pinned_application(application_wrapper).subscribe(
+                        service_id,
+                        instance_id,
+                        event_id,
+                        ANY_MAJOR,
+                        event_id,
+                    );
+                    insert_event_requested(service_id, instance_id, event_id).await;
                 }
+
                 register_message_handler_fn_ptr_safe(
                     application_wrapper,
                     service_id,
@@ -553,17 +580,14 @@ impl UPTransportVsomeip {
                     method_id
                 );
 
-                {
-                    let mut offered_services = OFFERED_SERVICES.write().await;
-                    if !offered_services.contains(&(service_id, instance_id, method_id)) {
-                        get_pinned_application(application_wrapper).offer_service(
-                            service_id,
-                            instance_id,
-                            ANY_MAJOR,
-                            ANY_MINOR,
-                        );
-                        offered_services.insert((service_id, instance_id, method_id));
-                    }
+                if !is_service_offered(service_id, instance_id, method_id).await {
+                    get_pinned_application(application_wrapper).offer_service(
+                        service_id,
+                        instance_id,
+                        ANY_MAJOR,
+                        ANY_MINOR,
+                    );
+                    insert_service_offered(service_id, instance_id, method_id).await;
                 }
 
                 register_message_handler_fn_ptr_safe(
@@ -593,16 +617,14 @@ impl UPTransportVsomeip {
                 let instance_id = vsomeip::ANY_INSTANCE; // TODO: Set this to 1? To ANY_INSTANCE?
                 let (_, method_id) = split_u32_to_u16(source_filter.resource_id);
 
-                {
-                    let requested_services = REQUESTED_SERVICES.write().await;
-                    if !requested_services.contains(&(service_id, instance_id, method_id)) {
-                        get_pinned_application(application_wrapper).request_service(
-                            service_id,
-                            instance_id,
-                            ANY_MAJOR,
-                            ANY_MINOR,
-                        );
-                    }
+                if !is_service_requested(service_id, instance_id, method_id).await {
+                    get_pinned_application(application_wrapper).request_service(
+                        service_id,
+                        instance_id,
+                        ANY_MAJOR,
+                        ANY_MINOR,
+                    );
+                    insert_service_requested(service_id, instance_id, method_id).await;
                 }
 
                 trace!(
@@ -768,80 +790,20 @@ impl UPTransportVsomeip {
                 ));
             }
             UMessageType::UMESSAGE_TYPE_PUBLISH => {
-                let _vsomeip_msg_res =
-                    convert_umsg_to_vsomeip_msg(&umsg, application_wrapper, runtime_wrapper).await;
-
-                // let Ok(mut vsomeip_msg) = vsomeip_msg_res else {
-                //     let err = vsomeip_msg_res.err().unwrap();
-                //     error!(
-                //         "{}:{} Converting UMessage to vsomeip message failed: {:?}",
-                //         UP_CLIENT_VSOMEIP_TAG, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, err
-                //     );
-                //     return Err(err);
-                // };
-                //
-                // let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
-                // let instance_id = get_pinned_message_base(&vsomeip_msg).get_instance();
-                // let event_id = get_pinned_message_base(&vsomeip_msg).get_method();
-                // let _interface_version =
-                //     get_pinned_message_base(&vsomeip_msg).get_interface_version();
-                //
-                // trace!(
-                //     "{}:{} Sending SOME/IP NOTIFICATION with service: {} instance: {} event: {}",
-                //     UP_CLIENT_VSOMEIP_TAG,
-                //     UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
-                //     service_id,
-                //     instance_id,
-                //     event_id
-                // );
-
-                // let payload = get_message_payload(&mut vsomeip_msg).get_shared_ptr();
-                // // TODO: Note that we cannot set the interface_version
-                // get_pinned_application(application_wrapper).notify(
-                //     service_id,
-                //     instance_id,
-                //     event_id,
-                //     payload,
-                //     true,
-                // );
+                let _vsomeip_msg_res = convert_umsg_to_vsomeip_msg_and_send(
+                    &umsg,
+                    application_wrapper,
+                    runtime_wrapper,
+                )
+                .await;
             }
             UMessageType::UMESSAGE_TYPE_REQUEST | UMessageType::UMESSAGE_TYPE_RESPONSE => {
-                let _vsomeip_msg_res =
-                    convert_umsg_to_vsomeip_msg(&umsg, application_wrapper, runtime_wrapper).await;
-
-                // TODO: For some reason the payload which is attached within convert_umsg_to_vsomeip_msg
-                //  appears to be invalid when returned, perhaps because we're passing the pinned
-                //  value out of where it was allocated on the stack? In any case, for now we
-                //  will send from within convert_umsg_to_vsomeip_msg
-                // let Ok(mut vsomeip_msg) = vsomeip_msg_res else {
-                //     let err = vsomeip_msg_res.err().unwrap();
-                //     error!(
-                //         "{}:{} Converting UMessage to vsomeip message failed: {:?}",
-                //         UP_CLIENT_VSOMEIP_TAG, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL, err
-                //     );
-                //     return Err(err);
-                // };
-                // let service_id = get_pinned_message_base(&vsomeip_msg).get_service();
-                // let instance_id = get_pinned_message_base(&vsomeip_msg).get_instance();
-                // let method_id = get_pinned_message_base(&vsomeip_msg).get_method();
-                // let _interface_version =
-                //     get_pinned_message_base(&vsomeip_msg).get_interface_version();
-                //
-                // trace!(
-                //     "{}:{} Sending SOME/IP message with service: {} instance: {} method: {}",
-                //     UP_CLIENT_VSOMEIP_TAG,
-                //     UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
-                //     service_id,
-                //     instance_id,
-                //     method_id
-                // );
-                //
-                // let payload_wrapper = get_message_payload(&mut vsomeip_msg);
-                // let payload = get_data_safe(&payload_wrapper);
-                // trace!("immediately before calling vsomeip send, here's the payload: {payload:?}");
-                //
-                // let shared_ptr_message = vsomeip_msg.as_ref().unwrap().get_shared_ptr();
-                // get_pinned_application(application_wrapper).send(shared_ptr_message);
+                let _vsomeip_msg_res = convert_umsg_to_vsomeip_msg_and_send(
+                    &umsg,
+                    application_wrapper,
+                    runtime_wrapper,
+                )
+                .await;
             }
         }
         Ok(())
@@ -869,12 +831,9 @@ impl UPTransportVsomeip {
             client_id,
             app_name
         );
-        let existing_app = {
-            let client_id_app_mapping = CLIENT_ID_APP_MAPPING.read().await;
-            client_id_app_mapping.contains_key(&client_id)
-        };
+        let found_app_res = find_app_name(client_id).await;
 
-        if existing_app {
+        if found_app_res.is_ok() {
             let err = UStatus::fail_with_code(
                 UCode::ALREADY_EXISTS,
                 format!(

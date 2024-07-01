@@ -213,6 +213,7 @@ async fn point_to_point() {
 
     let point_to_point_client_res = UPTransportVsomeip::new_with_config(
         &service_authority_name.to_string(),
+        &"me_authority".to_string(),
         streamer_ue_id,
         &abs_vsomeip_config_path.unwrap(),
     );
@@ -287,6 +288,7 @@ async fn point_to_point() {
 
     let client_res = UPTransportVsomeip::new_with_config(
         &client_authority_name.to_string(),
+        &"me_authority".to_string(),
         streamer_ue_id,
         &client_config.unwrap(),
     );
@@ -321,6 +323,7 @@ async fn point_to_point() {
 
     let service_res = UPTransportVsomeip::new_with_config(
         &service_authority_name.to_string(),
+        &"me_authority".to_string(),
         streamer_ue_id,
         &service_config.unwrap(),
     );
