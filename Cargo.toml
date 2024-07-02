@@ -1,5 +1,5 @@
 ################################################################################
-# Copyright (c) 2023 Contributors to the Eclipse Foundation
+# Copyright (c) 2024 Contributors to the Eclipse Foundation
 #
 # See the NOTICE file(s) distributed with this work for additional
 # information regarding copyright ownership.
@@ -11,8 +11,14 @@
 # SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-[package]
-author = "Eclipse Foundation uProtocol project"
+[workspace]
+resolver = "2"
+members = [
+    "up-transport-vsomeip",
+    "vsomeip-sys",
+]
+
+[workspace.package]
 documentation = "https://github.com/eclipse-uprotocol/up-spec#readme"
 edition = "2021"
 exclude = [
@@ -25,22 +31,22 @@ exclude = [
 ]
 keywords = ["uProtocol", "SDK", "vsomeip", "SOMEIP"]
 license = "Apache-2.0"
-name = "up-client-vsomeip-rust"
 readme = "README.md"
-repository = "https://github.com/eclipse-uprotocol/up-client-vsomeip-rust"
-rust-version = "1.72"
+repository = "https://github.com/eclipse-uprotocol/up-transport-vsomeip-rust"
+rust-version = "1.74"
 version = "0.1.0"
 
-[dependencies]
+[workspace.dependencies]
 async-trait = { version = "0.1" }
 bytes = { version = "1.5" }
 rand = { version = "0.8" }
 regex = { version = "1.10" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", version = "0.1.5" }
+up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "3a50104421a801d52e1d9c68979db54c013ce43d" }
 url = { version = "2.5" }
 uuid = { version = "1.7", features = ["v8"] }
+vsomeip-sys = { path = "vsomeip-sys", default-features = false }
 
-[dev-dependencies]
+[workspace.dev-dependencies]
 test-case = { version = "3.3" }

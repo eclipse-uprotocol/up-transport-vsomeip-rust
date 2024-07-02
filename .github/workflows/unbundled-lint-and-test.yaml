@@ -1,0 +1,289 @@
+# ********************************************************************************
+#  Copyright (c) 2024 Contributors to the Eclipse Foundation
+#
+#  See the NOTICE file(s) distributed with this work for additional
+#  information regarding copyright ownership.
+#
+#  This program and the accompanying materials are made available under the
+#  terms of the Apache License Version 2.0 which is available at
+#  https://www.apache.org/licenses/LICENSE-2.0
+#
+#  SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************/
+
+name: Lint and Test - Unbundled
+
+env:
+  VSOMEIP_RELEASE_URL: https://github.com/COVESA/vsomeip/archive/refs/tags/
+  VSOMEIP_RELEASE_TAG: 3.4.10.tar.gz
+  VSOMEIP_SOURCE_PATH: vsomeip-src
+  VSOMEIP_INSTALL_PATH: vsomeip-install
+
+  GENERIC_CPP_STDLIB_PATH: /usr/include/c++/11
+  ARCH_SPECIFIC_CPP_STDLIB_PATH: /usr/include/x86_64-linux-gnu/c++/11
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.*"
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  obtain_and_build_vsomeip:
+    runs-on: ubuntu-latest
+    outputs:
+      cache_key: ${{ steps.generate_cache_key.outputs.CACHE_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_SOURCE_TARBALL=${{ env.VSOMEIP_RELEASE_URL }}${{ env.VSOMEIP_RELEASE_TAG }}" >> $GITHUB_ENV
+          echo "VSOMEIP_SOURCE_PATH=${{ github.workspace }}/${{ env.VSOMEIP_SOURCE_PATH }}" >> $GITHUB_ENV
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+          echo "VSOMEIP_SOURCE_PATH_WITH_WILDCARD=${{ github.workspace }}/${{ env.VSOMEIP_SOURCE_PATH }}/*" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_SOURCE_TARBALL: ${{ env.VSOMEIP_SOURCE_TARBALL }}"
+          echo "VSOMEIP_SOURCE_PATH: ${{ env.VSOMEIP_SOURCE_PATH }}"
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+          echo "VSOMEIP_SOURCE_PATH_WITH_WILDCARD: ${{ env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD }}"
+
+      - name: Download tarball
+        run: |
+          wget -O vsomeip-source.tar.gz $VSOMEIP_SOURCE_TARBALL
+          ls -l
+
+      - name: Create destination directory
+        run: |
+          mkdir -p $VSOMEIP_SOURCE_PATH
+          ls -l
+
+      - name: Decompress tarball
+        run: |
+          tar --strip-components=1 -xzf vsomeip-source.tar.gz -C $VSOMEIP_SOURCE_PATH
+          ls -l
+
+      - name: Confirm decompressed
+        run: |
+          echo "Current working directory: $(pwd)"
+          echo "Contents of repository root:"
+          ls -l
+          echo "Contents of decompressed folder ($VSOMEIP_SOURCE_PATH):"
+          ls -l $VSOMEIP_SOURCE_PATH
+
+      - name: Generate cache key
+        run: echo "CACHE_KEY=${{ runner.os }}-vsomeip-${{ hashFiles(env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD) }}" >> $GITHUB_ENV
+
+      - name: Set cache key output
+        id: generate_cache_key
+        run: echo "CACHE_KEY=${{ env.CACHE_KEY }}" >> $GITHUB_OUTPUT
+
+      - name: Cache vsomeip build
+        id: cache-vsomeip
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.VSOMEIP_INSTALL_PATH }}
+          key: ${{ runner.os }}-vsomeip-${{ hashFiles(env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD) }}
+          restore-keys: |
+            ${{ runner.os }}-vsomeip-
+
+      - name: Install dependencies
+        if: steps.cache-vsomeip.outputs.cache-hit != 'true'
+        run: sudo apt-get install -y build-essential cmake libboost-all-dev
+
+      - name: Build vsomeip
+        if: steps.cache-vsomeip.outputs.cache-hit != 'true'
+        run: |
+          cd $VSOMEIP_SOURCE_PATH
+          cmake -Bbuild -DCMAKE_INSTALL_PREFIX=$VSOMEIP_INSTALL_PATH -DENABLE_SIGNAL_HANDLING=1 .
+          cmake --build build --target install
+
+      - name: Save vsomeip build to cache
+        if: steps.cache-vsomeip.outputs.cache-hit != 'true'
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.VSOMEIP_INSTALL_PATH }}
+          key: ${{ runner.os }}-vsomeip-${{ hashFiles(env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD) }}
+
+  lint:
+    name: Lint
+    needs: obtain_and_build_vsomeip
+    runs-on: ubuntu-latest
+    env:
+      CACHE_KEY: ${{ needs.obtain_and_build_vsomeip.outputs.cache_key }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+
+      - name: Ensure vsomeip install path exists
+        run: |
+          mkdir -p ${{ env.VSOMEIP_INSTALL_PATH }}
+          ls -l
+
+      - name: Print cache_key
+        run: |
+          echo "cache_key: ${{ env.CACHE_KEY }}"
+
+      - name: Restore vsomeip build cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.VSOMEIP_INSTALL_PATH }}
+          key: ${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-vsomeip-
+
+      - name: Install stable toolchain
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+
+      - name: Build the project
+        working-directory: ${{github.workspace}}
+        run: cargo build --no-default-features
+      - name: cargo fmt
+        working-directory: ${{github.workspace}}
+        run: cargo fmt -- --check
+      - name: cargo clippy
+        working-directory: ${{github.workspace}}
+        run: cargo clippy --no-default-features --all-targets -- -W warnings -D warnings
+
+  test:
+    name: Test
+    needs: obtain_and_build_vsomeip
+    runs-on: ubuntu-latest
+    env:
+      CACHE_KEY: ${{ needs.obtain_and_build_vsomeip.outputs.cache_key }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install C++ dependencies
+        if: steps.cache-vsomeip.outputs.cache-hit != 'true'
+        run: sudo apt-get install -y build-essential cmake libboost-all-dev
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}/lib" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+          echo "LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}"
+
+      - name: Ensure vsomeip install path exists
+        run: |
+          mkdir -p ${{ env.VSOMEIP_INSTALL_PATH }}
+          ls -l
+
+      - name: Print cache_key
+        run: |
+          echo "cache_key: ${{ env.CACHE_KEY }}"
+
+      - name: Restore vsomeip build cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.VSOMEIP_INSTALL_PATH }}
+          key: ${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-vsomeip-
+
+      - name: Install dependencies
+        run: |
+          cargo install cargo-tarpaulin
+      - name: Show toolchain information
+        working-directory: ${{github.workspace}}
+        run: |
+          rustup toolchain list
+          cargo --version
+      - name: Run tests and report code coverage
+        run: |
+          # enable nightly features so that we can also include Doctests
+          LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${VSOMEIP_INSTALL_PATH}/lib RUSTC_BOOTSTRAP=1 cargo tarpaulin --no-default-features -o xml -o lcov -o html --doc --tests -- --test-threads 1 
+
+      - name: Upload coverage report (xml)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Coverage Results (xml)
+          path: cobertura.xml
+
+      - name: Upload coverage report (lcov)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Coverage Results (lcov)
+          path: lcov.info
+
+      - name: Upload coverage report (html)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Coverage Results (html)
+          path: tarpaulin-report.html
+
+      # - name: Upload coverage report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Code coverage report
+      #     path: cobertura.xml
+
+  build-docs:
+    name: Build documentation
+    needs: obtain_and_build_vsomeip
+    runs-on: ubuntu-latest
+    env:
+      CACHE_KEY: ${{ needs.obtain_and_build_vsomeip.outputs.cache_key }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+
+      - name: Ensure vsomeip install path exists
+        run: |
+          mkdir -p ${{ env.VSOMEIP_INSTALL_PATH }}
+          ls -l
+
+      - name: Print cache_key
+        run: |
+          echo "cache_key: ${{ env.CACHE_KEY }}"
+
+      - name: Restore vsomeip build cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.VSOMEIP_INSTALL_PATH }}
+          key: ${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-vsomeip-
+
+      - name: Create Documentation for vsomeip-sys
+        working-directory: ${{github.workspace}}
+        run: RUSTDOCFLAGS=-Dwarnings cargo doc -p vsomeip-sys --no-deps --no-default-features
+
+      - name: Create Documentation for up-transport-vsomeip
+        working-directory: ${{github.workspace}}
+        run: RUSTDOCFLAGS=-Dwarnings cargo doc -p up-transport-vsomeip --no-deps --no-default-features

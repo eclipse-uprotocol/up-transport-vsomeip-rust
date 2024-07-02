@@ -1,0 +1,40 @@
+################################################################################
+# Copyright (c) 2024 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+################################################################################
+
+[package]
+name = "vsomeip-sys"
+version.workspace = true
+edition.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["bundled", "ssl"]
+bundled = ["cmake"]
+ssl = ["openssl-sys"]
+vendored-ssl = ["bundled", "ssl", "openssl-sys/vendored"]
+
+[dependencies]
+autocxx = { version = "0.26.0" }
+crossbeam-channel = "0.5.13"
+cxx = { version = "1.0" }
+lazy_static = { version = "1.4.0" }
+once_cell = { version = "1.19.0" }
+log = { version = "0.4.21" }
+openssl-sys = { version = "0.9", optional = true }
+
+[build-dependencies]
+autocxx-build = { version = "0.26.0" }
+cmake = { version = "0.1" , optional = true }
+cxx-build = { version = "1.0.122" }
+miette = { version = "5", features = ["fancy"] }
