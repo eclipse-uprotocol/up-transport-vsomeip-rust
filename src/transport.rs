@@ -11,22 +11,21 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-use crate::determinations::{determine_message_type, determine_registration_type};
+use crate::determine_message_type::{determine_registration_type, determine_send_type};
 use crate::listener_registry::{
     find_app_name, find_available_listener_id, free_listener_id, get_extern_fn,
     insert_into_listener_id_map, map_listener_id_to_client_id, register_listener_id_with_listener,
     release_listener_id,
 };
+use crate::transport_inner::TransportCommand;
+use crate::transport_inner::{
+    UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL,
+    UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER_INTERNAL, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
+    UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL, UP_CLIENT_VSOMEIP_TAG,
+};
 use crate::vsomeip_config::extract_applications;
-use crate::{
-    any_uuri, any_uuri_fixed_authority_id, ApplicationName,
-    UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL, UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL,
-    UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL,
-};
+use crate::{any_uuri, any_uuri_fixed_authority_id, ApplicationName};
 use crate::{RegistrationType, UPTransportVsomeip};
-use crate::{
-    TransportCommand, UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER_INTERNAL, UP_CLIENT_VSOMEIP_TAG,
-};
 use async_trait::async_trait;
 use log::{error, trace, warn};
 use std::sync::Arc;
@@ -168,7 +167,7 @@ impl UTransport for UPTransportVsomeip {
             })?;
         }
 
-        let message_type = determine_message_type(source_filter, &sink_filter.cloned())?;
+        let message_type = determine_send_type(source_filter, &sink_filter.cloned())?;
         trace!("inside send(), message_type: {message_type:?}");
         let app_name = find_app_name(message_type.client_id()).await;
         trace!("app_name: {app_name:?}");
@@ -189,7 +188,7 @@ impl UTransport for UPTransportVsomeip {
 
         let (tx, rx) = oneshot::channel();
         send_to_inner_with_status(
-            &self.tx_to_event_loop,
+            &self.inner_transport.transport_command_sender,
             TransportCommand::Send(message, message_type, tx),
         )
         .await?;
@@ -250,7 +249,7 @@ impl UTransport for UPTransportVsomeip {
 
         let (tx, rx) = oneshot::channel();
         send_to_inner_with_status(
-            &self.tx_to_event_loop,
+            &self.inner_transport.transport_command_sender,
             TransportCommand::RegisterListener(src, sink, registration_type, msg_handler, tx),
         )
         .await?;
@@ -282,7 +281,7 @@ impl UTransport for UPTransportVsomeip {
 
         let (tx, rx) = oneshot::channel();
         send_to_inner_with_status(
-            &self.tx_to_event_loop,
+            &self.inner_transport.transport_command_sender,
             TransportCommand::UnregisterListener(src, sink, registration_type.clone(), tx),
         )
         .await?;
@@ -370,7 +369,7 @@ impl UPTransportVsomeip {
             let message_type = RegistrationType::Response(message_type.client_id());
             let (tx, rx) = oneshot::channel();
             send_to_inner_with_status(
-                &self.tx_to_event_loop,
+                &self.inner_transport.transport_command_sender,
                 TransportCommand::RegisterListener(
                     src.clone(),
                     Some(sink.clone()),
@@ -414,7 +413,7 @@ impl UPTransportVsomeip {
         for app_config in &application_configs {
             let (tx, rx) = oneshot::channel();
             send_to_inner_with_status(
-                &self.tx_to_event_loop,
+                &self.inner_transport.transport_command_sender,
                 TransportCommand::InitializeNewApp(app_config.id, app_config.name.clone(), tx),
             )
             .await?;
@@ -456,7 +455,7 @@ impl UPTransportVsomeip {
 
             let (tx, rx) = oneshot::channel();
             send_to_inner_with_status(
-                &self.tx_to_event_loop,
+                &self.inner_transport.transport_command_sender,
                 TransportCommand::RegisterListener(
                     src,
                     Some(sink),
@@ -536,7 +535,7 @@ impl UPTransportVsomeip {
                     UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER
                 );
                 send_to_inner_with_status(
-                    &self.tx_to_event_loop,
+                    &self.inner_transport.transport_command_sender,
                     TransportCommand::InitializeNewApp(
                         registration_type.client_id(),
                         app_name.clone(),

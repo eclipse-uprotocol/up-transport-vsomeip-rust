@@ -28,16 +28,16 @@ pub(crate) fn determine_registration_type(
     )
 }
 
-pub(crate) fn determine_message_type(
+pub(crate) fn determine_send_type(
     source_filter: &UUri,
     sink_filter: &Option<UUri>,
 ) -> Result<RegistrationType, UStatus> {
-    determine_type(source_filter, sink_filter, None, DeterminationType::Message)
+    determine_type(source_filter, sink_filter, None, DeterminationType::Send)
 }
 
 enum DeterminationType {
     Register,
-    Message,
+    Send,
 }
 
 fn determine_type(
@@ -63,11 +63,9 @@ fn determine_type(
             return Ok(RegistrationType::AllPointToPoint(0xFFFF));
         }
 
-        let client_id = {
-            match determination_type {
-                DeterminationType::Register => sink_filter.ue_id as ClientId,
-                DeterminationType::Message => source_filter.ue_id as ClientId,
-            }
+        let client_id = match determination_type {
+            DeterminationType::Register => sink_filter.ue_id as ClientId,
+            DeterminationType::Send => source_filter.ue_id as ClientId,
         };
 
         if sink_filter.resource_id == 0 {
@@ -76,14 +74,14 @@ fn determine_type(
             Ok(RegistrationType::Request(client_id))
         }
     } else {
-        let client_id = {
-            match determination_type {
-                DeterminationType::Register => {
-                    my_ue_id.expect("Should have been an own ue_id available in this path")
-                }
-                DeterminationType::Message => source_filter.ue_id as ClientId,
+        let client_id = match determination_type {
+            DeterminationType::Register => {
+                my_ue_id.expect("Should have been an own ue_id available in this path")
             }
+            DeterminationType::Send => source_filter.ue_id as ClientId,
         };
         Ok(RegistrationType::Publish(client_id))
     }
 }
+
+// TODO: Add unit tests

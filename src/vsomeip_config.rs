@@ -49,7 +49,7 @@ fn read_json_file(file_path: &PathBuf) -> Result<Value, serde_json::Error> {
     serde_json::from_str(&content)
 }
 
-pub fn extract_applications(file_path: &PathBuf) -> Result<Vec<ApplicationConfig>, UStatus> {
+pub(crate) fn extract_applications(file_path: &PathBuf) -> Result<Vec<ApplicationConfig>, UStatus> {
     let file_content = read_json_file(file_path);
 
     return match file_content {
@@ -77,3 +77,5 @@ pub fn extract_applications(file_path: &PathBuf) -> Result<Vec<ApplicationConfig
         }
     };
 }
+
+// TODO: Add unit tests

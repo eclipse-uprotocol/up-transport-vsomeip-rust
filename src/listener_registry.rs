@@ -1,3 +1,16 @@
+/********************************************************************************
+ * Copyright (c) 2023 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
 use crate::message_conversions::convert_vsomeip_msg_to_umsg;
 use crate::{ApplicationName, AuthorityName, ClientId};
 use cxx::{let_cxx_string, SharedPtr};
@@ -297,3 +310,5 @@ pub(crate) async fn add_client_id_app_name(
         Err(UStatus::fail_with_code(UCode::ALREADY_EXISTS, err_msg))
     }
 }
+
+// TODO: Add unit tests
