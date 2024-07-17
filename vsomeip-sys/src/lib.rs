@@ -37,6 +37,8 @@ include_cpp! {
     generate!("vsomeip_v3::ANY_METHOD")
     generate!("vsomeip_v3::ANY_EVENT")
     generate!("vsomeip_v3::ANY_EVENTGROUP")
+    generate!("vsomeip_v3::DEFAULT_MAJOR")
+    generate!("vsomeip_v3::DEFAULT_MINOR")
     generate!("glue::RuntimeWrapper")
     generate!("glue::make_runtime_wrapper")
     generate!("glue::ApplicationWrapper")

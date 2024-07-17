@@ -41,6 +41,7 @@ unsafe impl ExternType for AvailabilityHandlerFnPtr {
 /// We want the ability to think at a higher level and not need to consider the underlying
 /// extern "C" fn, so we wrap this here in a Rust struct
 #[repr(transparent)]
+#[derive(Debug)]
 pub struct MessageHandlerFnPtr(pub extern "C" fn(&SharedPtr<vsomeip::message>));
 
 unsafe impl ExternType for MessageHandlerFnPtr {
