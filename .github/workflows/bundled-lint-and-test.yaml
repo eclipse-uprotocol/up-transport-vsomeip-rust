@@ -1,0 +1,169 @@
+# ********************************************************************************
+#  Copyright (c) 2024 Contributors to the Eclipse Foundation
+#
+#  See the NOTICE file(s) distributed with this work for additional
+#  information regarding copyright ownership.
+#
+#  This program and the accompanying materials are made available under the
+#  terms of the Apache License Version 2.0 which is available at
+#  https://www.apache.org/licenses/LICENSE-2.0
+#
+#  SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************/
+
+name: Lint and Test - Bundled
+
+env:
+  VSOMEIP_INSTALL_PATH: vsomeip-install
+  GENERIC_CPP_STDLIB_PATH: /usr/include/c++/11
+  ARCH_SPECIFIC_CPP_STDLIB_PATH: /usr/include/x86_64-linux-gnu/c++/11
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.*"
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+      group: ${{ github.ref }}-${{ github.workflow }}
+      cancel-in-progress: true
+
+jobs:
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install C++ dependencies
+        run: sudo apt-get install -y build-essential cmake libboost-all-dev libclang-dev
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+
+      - name: Ensure vsomeip install path exists
+        run: |
+          mkdir -p ${{ env.VSOMEIP_INSTALL_PATH }}
+          ls -l
+
+      - name: Install stable toolchain
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+
+      - name: Build the project
+        working-directory: ${{github.workspace}}
+        run: cargo build
+      - name: cargo fmt
+        working-directory: ${{github.workspace}}
+        run: cargo fmt -- --check
+      - name: cargo clippy
+        working-directory: ${{github.workspace}}
+        run: cargo clippy --all-targets -- -W warnings -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install C++ dependencies
+        run: sudo apt-get install -y build-essential cmake libboost-all-dev libclang-dev
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+
+      - name: Ensure vsomeip install path exists
+        run: |
+          mkdir -p ${{ env.VSOMEIP_INSTALL_PATH }}
+          ls -l
+
+      - name: Print cache_key
+        run: |
+          echo "cache_key: ${{ env.CACHE_KEY }}"
+
+      - name: Install dependencies
+        run: |
+          cargo install cargo-tarpaulin
+      - name: Show toolchain information
+        working-directory: ${{github.workspace}}
+        run: |
+          rustup toolchain list
+          cargo --version
+      - name: Run tests and report code coverage
+        run: |
+          # enable nightly features so that we can also include Doctests
+          LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${VSOMEIP_INSTALL_PATH}/lib RUSTC_BOOTSTRAP=1 cargo tarpaulin -o xml -o lcov -o html --doc --tests -- --test-threads 1
+
+      - name: Upload coverage report (xml)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Coverage Results (xml)
+          path: cobertura.xml
+
+      - name: Upload coverage report (lcov)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Coverage Results (lcov)
+          path: lcov.info
+
+      - name: Upload coverage report (html)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test Coverage Results (html)
+          path: tarpaulin-report.html
+
+      # - name: Upload coverage report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Code coverage report
+      #     path: cobertura.xml
+
+  build-docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install C++ dependencies
+        run: sudo apt-get install -y build-essential cmake libboost-all-dev libclang-dev
+
+      - name: Set environment variables
+        run: |
+          echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
+
+      - name: Print environment variables for debugging
+        run: |
+          echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
+
+      - name: Ensure vsomeip install path exists
+        run: |
+          mkdir -p ${{ env.VSOMEIP_INSTALL_PATH }}
+          ls -l
+
+      - name: Create Documentation for vsomeip-sys
+        working-directory: ${{github.workspace}}
+        run: RUSTDOCFLAGS=-Dwarnings cargo doc -p vsomeip-sys --no-deps
+
+      - name: Create Documentation for up-transport-vsomeip
+        working-directory: ${{github.workspace}}
+        run: RUSTDOCFLAGS=-Dwarnings cargo doc -p up-transport-vsomeip --no-deps

@@ -1,5 +1,5 @@
 /********************************************************************************
- * Copyright (c) 2023 Contributors to the Eclipse Foundation
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -11,6 +11,12 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-pub mod transport;
+#include "../include/application_wrapper.h"
 
-pub struct UPClientVsomeip {}
+namespace glue {
+
+std::unique_ptr<ApplicationWrapper> make_application_wrapper(std::shared_ptr<vsomeip_v3::application> ptr) {
+    return std::make_unique<ApplicationWrapper>(std::move(ptr));
+}
+
+} // namespace glue
