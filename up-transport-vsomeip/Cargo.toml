@@ -29,15 +29,23 @@ bundled = ["vsomeip-sys/bundled"]
 
 [dependencies]
 async-trait = { workspace = true }
+bimap = { workspace = true }
 bytes = { workspace = true }
-rand = { workspace = true }
-regex = { workspace = true }
+crossbeam-channel = { workspace = true }
+cxx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
 up-rust = { workspace = true }
-url = { workspace = true }
-uuid = { workspace = true }
+vsomeip-proc-macro = { workspace = true }
 vsomeip-sys = { workspace = true }
+lazy_static = { workspace = true }
+protobuf = { workspace = true }
+log = { workspace = true }
+once_cell = { workspace = true }
+futures = "0.3.30"
 
 [dev-dependencies]
+env_logger = { version = "0.11.3" }
+hello-world-protos = { path = "../example-utils/hello-world-protos" }
 test-case = { version = "3.3" }

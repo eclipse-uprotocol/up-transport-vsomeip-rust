@@ -33,19 +33,25 @@ keywords = ["uProtocol", "SDK", "vsomeip", "SOMEIP"]
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-transport-vsomeip-rust"
-rust-version = "1.74"
+rust-version = "1.76"
 version = "0.1.0"
 
 [workspace.dependencies]
 async-trait = { version = "0.1" }
+bimap = { version = "0.6.3" }
 bytes = { version = "1.5" }
-rand = { version = "0.8" }
+crossbeam-channel = { version = "0.5.13" }
+cxx = { version = "1.0" }
+lazy_static = { version = "1.4.0" }
+log = { version = "0.4.21", features = [] }
+once_cell = { version = "1.19.0" }
+protobuf = { version = "3.4.0" }
 regex = { version = "1.10" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
+tokio = { version = "1.35.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "tracing"] }
 up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "3a50104421a801d52e1d9c68979db54c013ce43d" }
-url = { version = "2.5" }
-uuid = { version = "1.7", features = ["v8"] }
+vsomeip-proc-macro = { path = "vsomeip-proc-macro" }
 vsomeip-sys = { path = "vsomeip-sys", default-features = false }
 
 [workspace.dev-dependencies]
