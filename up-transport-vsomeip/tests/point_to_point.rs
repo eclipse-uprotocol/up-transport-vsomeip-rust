@@ -12,7 +12,7 @@
  ********************************************************************************/
 
 use log::{error, info, trace};
-use protobuf::{Enum, EnumOrUnknown};
+use protobuf::EnumOrUnknown;
 use std::env::current_dir;
 use std::fs::canonicalize;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -21,14 +21,12 @@ use std::time::Duration;
 use tokio::time::Instant;
 use up_rust::UMessageType::UMESSAGE_TYPE_UNSPECIFIED;
 use up_rust::UPayloadFormat::UPAYLOAD_FORMAT_PROTOBUF;
-use up_rust::{
-    UCode, UListener, UMessage, UMessageBuilder, UMessageType, UStatus, UTransport, UUri, UUID,
-};
-use up_transport_vsomeip::{UPTransportVsomeip, UeId};
+use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UMessageType, UTransport, UUri, UUID};
+use up_transport_vsomeip::UPTransportVsomeip;
 
 const TEST_DURATION: u64 = 1000;
 
-const STREAMER_UE_ID: u16 = 0x9876;
+const STREAMER_UE_ID: u32 = 0x9876;
 
 const CLIENT_AUTHORITY_NAME: &str = "foo";
 const CLIENT_UE_ID: u32 = 0x1234;
@@ -47,7 +45,7 @@ const SERVICE_METHOD_RESOURCE_ID: u32 = 0x0421;
 const NON_POINT_TO_POINT_LISTENED_AUTHORITY: &str = "oops";
 const OTHER_CLIENT_UE_ID: u32 = 0x7331;
 const OTHER_CLIENT_UE_VERSION_NUMBER: u32 = 1;
-const OTHER_CLIENT_STREAMER_UE_ID: u16 = 0x1337;
+const OTHER_CLIENT_STREAMER_UE_ID: u32 = 0x1337;
 
 const OTHER_SERVICE_UE_ID: u32 = 0x5252;
 const OTHER_SERVICE_UE_VERSION_NUMBER: u32 = 1;
@@ -211,7 +209,7 @@ impl UListener for PointToPointListener {
                 );
 
                 let original_id: Result<UUID, _> =
-                    msg_with_correct_payload_format.extract_protobuf_payload();
+                    msg_with_correct_payload_format.extract_protobuf();
 
                 let original_id = {
                     match original_id {
@@ -255,10 +253,6 @@ impl UListener for PointToPointListener {
             }
         }
     }
-
-    async fn on_error(&self, err: UStatus) {
-        info!("{:?}", err);
-    }
 }
 
 pub struct ResponseListener {
@@ -281,10 +275,6 @@ impl UListener for ResponseListener {
     async fn on_receive(&self, msg: UMessage) {
         info!("ResponseListener: Received Response:\n{:?}", msg);
         self.received_response.fetch_add(1, Ordering::SeqCst);
-    }
-
-    async fn on_error(&self, err: UStatus) {
-        info!("{:?}", err);
     }
 }
 
@@ -320,8 +310,7 @@ impl UListener for RequestListener {
 
         info!("Corrected Request:\n{:?}", msg_with_correct_payload_format);
 
-        let original_id: Result<UUID, _> =
-            msg_with_correct_payload_format.extract_protobuf_payload();
+        let original_id: Result<UUID, _> = msg_with_correct_payload_format.extract_protobuf();
 
         let original_id = {
             match original_id {
@@ -336,7 +325,7 @@ impl UListener for RequestListener {
 
         let response_msg =
             UMessageBuilder::response_for_request(&msg_with_correct_payload_format.attributes)
-                .with_comm_status(UCode::OK.value())
+                .with_comm_status(UCode::OK)
                 .build_with_protobuf_payload(&original_id);
 
         info!("response_msg: {response_msg:?}");
@@ -355,29 +344,11 @@ impl UListener for RequestListener {
             }
         }
     }
-
-    async fn on_error(&self, err: UStatus) {
-        info!("{:?}", err);
-    }
 }
-fn any_uuri() -> UUri {
-    UUri {
-        authority_name: "*".to_string(), // any authority
-        ue_id: 0x0000_FFFF,              // any instance, any service
-        ue_version_major: 0xFF,          // any
-        resource_id: 0xFFFF,             // any
-        ..Default::default()
-    }
-}
-
 fn any_from_authority(authority_name: &str) -> UUri {
-    UUri {
-        authority_name: authority_name.to_string(),
-        ue_id: 0x0000_FFFF,     // any instance, any service
-        ue_version_major: 0xFF, // any
-        resource_id: 0xFFFF,    // any
-        ..Default::default()
-    }
+    let mut any_with_authority = UUri::any();
+    any_with_authority.authority_name = authority_name.to_string();
+    any_with_authority
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -391,10 +362,11 @@ async fn point_to_point() {
     let abs_vsomeip_config_path = canonicalize(vsomeip_config_path).ok();
     info!("abs_vsomeip_config_path: {abs_vsomeip_config_path:?}");
 
+    let point_to_point_uri =
+        UUri::try_from_parts(PTP_AUTHORITY_NAME, STREAMER_UE_ID, 1, 0).unwrap();
     let point_to_point_client_res = UPTransportVsomeip::new_with_config(
+        point_to_point_uri,
         &PTP_AUTHORITY_NAME.to_string(),
-        &PTP_AUTHORITY_NAME.to_string(),
-        STREAMER_UE_ID,
         &abs_vsomeip_config_path.unwrap(),
         None,
     );
@@ -403,7 +375,7 @@ async fn point_to_point() {
     };
     let point_to_point_client = Arc::new(point_to_point_client);
 
-    let source = any_uuri();
+    let source = UUri::any();
     let sink = any_from_authority(PTP_AUTHORITY_NAME);
 
     let point_to_point_listener_check =
@@ -420,10 +392,10 @@ async fn point_to_point() {
     let client_config = canonicalize(client_config).ok();
     info!("client_config: {client_config:?}");
 
+    let client_uri = UUri::try_from_parts(CLIENT_AUTHORITY_NAME, CLIENT_UE_ID, 1, 0).unwrap();
     let client_res = UPTransportVsomeip::new_with_config(
+        client_uri,
         &CLIENT_AUTHORITY_NAME.to_string(),
-        &CLIENT_AUTHORITY_NAME.to_string(),
-        CLIENT_UE_ID as UeId,
         &client_config.unwrap(),
         None,
     );
@@ -455,10 +427,10 @@ async fn point_to_point() {
     let service_config = canonicalize(service_config).ok();
     info!("service_config: {service_config:?}");
 
+    let service_uri = UUri::try_from_parts(SERVICE_AUTHORITY_NAME, SERVICE_UE_ID, 1, 0).unwrap();
     let service_res = UPTransportVsomeip::new_with_config(
+        service_uri,
         &SERVICE_AUTHORITY_NAME.to_string(),
-        &SERVICE_AUTHORITY_NAME.to_string(),
-        SERVICE_UE_ID as UeId,
         &service_config.unwrap(),
         None,
     );
@@ -475,17 +447,27 @@ async fn point_to_point() {
     let request_listener: Arc<dyn UListener> = request_listener_check.clone();
 
     let reg_service_1 = service
-        .register_listener(&any_uuri(), Some(&service_uuri()), request_listener.clone())
+        .register_listener(
+            &UUri::any(),
+            Some(&service_uuri()),
+            request_listener.clone(),
+        )
         .await;
 
     if let Err(err) = reg_service_1 {
         error!("Unable to register: {:?}", err);
     }
 
-    let non_listened_to_client = UPTransportVsomeip::new(
-        &NON_POINT_TO_POINT_LISTENED_AUTHORITY.to_string(),
-        &NON_POINT_TO_POINT_LISTENED_AUTHORITY.to_string(),
+    let non_listened_to_client_uri = UUri::try_from_parts(
+        NON_POINT_TO_POINT_LISTENED_AUTHORITY,
         OTHER_CLIENT_STREAMER_UE_ID,
+        1,
+        0,
+    )
+    .unwrap();
+    let non_listened_to_client = UPTransportVsomeip::new(
+        non_listened_to_client_uri,
+        &NON_POINT_TO_POINT_LISTENED_AUTHORITY.to_string(),
         None,
     )
     .unwrap();

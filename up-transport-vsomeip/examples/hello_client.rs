@@ -1,12 +1,25 @@
-use async_trait::async_trait;
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
 use hello_world_protos::hello_world_service::{HelloRequest, HelloResponse};
 use log::trace;
 use std::fs::canonicalize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use up_rust::communication::{CallOptions, InMemoryRpcClient, RpcClient, UPayload};
 use up_rust::UPayloadFormat::UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY;
-use up_rust::{UListener, UMessage, UMessageBuilder, UStatus, UTransport, UUri};
+use up_rust::{UStatus, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
 
 const HELLO_SERVICE_ID: u16 = 0x6000;
@@ -24,37 +37,11 @@ const HELLO_SERVICE_UE_VERSION_MAJOR: u8 = HELLO_SERVICE_MAJOR;
 const HELLO_SERVICE_RESOURCE_ID: u16 = HELLO_METHOD_ID;
 
 const CLIENT_AUTHORITY: &str = "me_authority";
-const CLIENT_UE_ID: u16 = 0x5678;
+const CLIENT_UE_ID: u32 = 0x5678;
 const CLIENT_UE_VERSION_MAJOR: u8 = 1;
 const CLIENT_RESOURCE_ID: u16 = 0;
 
 const REQUEST_TTL: u32 = 1000;
-
-struct ServiceResponseListener;
-
-#[async_trait]
-impl UListener for ServiceResponseListener {
-    async fn on_receive(&self, msg: UMessage) {
-        println!("ServiceResponseListener: Received a message: {msg:?}");
-
-        let mut msg = msg.clone();
-
-        if let Some(ref mut attributes) = msg.attributes.as_mut() {
-            attributes.payload_format =
-                ::protobuf::EnumOrUnknown::new(UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY);
-        }
-
-        let Ok(hello_response) = msg.extract_protobuf_payload::<HelloResponse>() else {
-            panic!("Unable to parse into HelloResponse");
-        };
-
-        println!("Here we received response: {hello_response:?}");
-    }
-
-    async fn on_error(&self, err: UStatus) {
-        println!("ServiceResponseListener: Encountered an error: {err:?}");
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), UStatus> {
@@ -70,36 +57,34 @@ async fn main() -> Result<(), UStatus> {
 
     // There will be a single vsomeip_transport, as there is a connection into device and a streamer
     // TODO: Add error handling if we fail to create a UPTransportVsomeip
-    let client: Arc<dyn UTransport> = Arc::new(
+    let client_uuri = UUri::try_from_parts(
+        CLIENT_AUTHORITY,
+        CLIENT_UE_ID,
+        CLIENT_UE_VERSION_MAJOR,
+        CLIENT_RESOURCE_ID,
+    )
+    .unwrap();
+    let client = Arc::new(
         UPTransportVsomeip::new_with_config(
-            &CLIENT_AUTHORITY.to_string(),
+            client_uuri,
             &HELLO_SERVICE_AUTHORITY.to_string(),
-            CLIENT_UE_ID,
             &vsomeip_config.unwrap(),
             None,
         )
         .unwrap(),
     );
 
-    let source = UUri {
-        authority_name: CLIENT_AUTHORITY.to_string(),
-        ue_id: CLIENT_UE_ID as u32,
-        ue_version_major: CLIENT_UE_VERSION_MAJOR as u32,
-        resource_id: CLIENT_RESOURCE_ID as u32,
-        ..Default::default()
-    };
-    let sink = UUri {
-        authority_name: HELLO_SERVICE_AUTHORITY.to_string(),
-        ue_id: HELLO_SERVICE_UE_ID,
-        ue_version_major: HELLO_SERVICE_UE_VERSION_MAJOR as u32,
-        resource_id: HELLO_SERVICE_RESOURCE_ID as u32,
-        ..Default::default()
-    };
+    let l2_client = InMemoryRpcClient::new(client.clone(), client.clone())
+        .await
+        .unwrap();
 
-    let service_response_listener: Arc<dyn UListener> = Arc::new(ServiceResponseListener);
-    client
-        .register_listener(&sink, Some(&source), service_response_listener)
-        .await?;
+    let sink = UUri::try_from_parts(
+        HELLO_SERVICE_AUTHORITY,
+        HELLO_SERVICE_UE_ID,
+        HELLO_SERVICE_UE_VERSION_MAJOR,
+        HELLO_SERVICE_RESOURCE_ID,
+    )
+    .unwrap();
 
     let mut i = 0;
     loop {
@@ -110,12 +95,36 @@ async fn main() -> Result<(), UStatus> {
             ..Default::default()
         };
         i += 1;
+        println!("Sending Request message with payload:\n{hello_request:?}");
 
-        let request_msg = UMessageBuilder::request(sink.clone(), source.clone(), REQUEST_TTL)
-            .build_with_protobuf_payload(&hello_request)
-            .unwrap();
-        println!("Sending Request message:\n{request_msg:?}");
+        let call_options = CallOptions::for_rpc_request(REQUEST_TTL, None, None, None);
+        let invoke_res = l2_client
+            .invoke_method(
+                sink.clone(),
+                call_options,
+                Some(UPayload::try_from_protobuf(hello_request).unwrap()),
+            )
+            .await;
 
-        client.send(request_msg).await?;
+        let Ok(response) = invoke_res else {
+            panic!(
+                "Hit an error attempting to invoke method: {:?}",
+                invoke_res.err().unwrap()
+            );
+        };
+
+        let hello_response_vsomeip_unspecified_payload_format = response.unwrap();
+        let hello_response_protobuf_payload_format = UPayload::new(
+            hello_response_vsomeip_unspecified_payload_format.payload(),
+            UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY,
+        );
+
+        let Ok(hello_response) =
+            hello_response_protobuf_payload_format.extract_protobuf::<HelloResponse>()
+        else {
+            panic!("Unable to parse into HelloResponse");
+        };
+
+        println!("Here we received response: {hello_response:?}");
     }
 }

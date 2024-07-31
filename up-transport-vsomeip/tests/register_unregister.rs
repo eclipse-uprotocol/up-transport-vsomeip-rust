@@ -39,17 +39,11 @@ mod tests {
     async fn test_registering_unregistering_publish() {
         test_lib::before_test();
 
+        let client_uri = UUri::try_from_parts("foo", 10, 1, 0).unwrap();
         let client =
-            UPTransportVsomeip::new(&"foo".to_string(), &"me_authority".to_string(), 10, None)
-                .unwrap();
+            UPTransportVsomeip::new(client_uri, &"me_authority".to_string(), None).unwrap();
 
-        let source_filter = UUri {
-            authority_name: "foo".to_string(),
-            ue_id: 0x01,
-            ue_version_major: 1,
-            resource_id: 10,
-            ..Default::default()
-        };
+        let source_filter = UUri::try_from_parts("foo", 0x01, 1, 10).unwrap();
         let printing_helper: Arc<dyn UListener> = Arc::new(PrintingListener);
 
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -83,24 +77,12 @@ mod tests {
     async fn test_registering_unregistering_request() {
         test_lib::before_test();
 
+        let client_uri = UUri::try_from_parts("foo", 10, 1, 0).unwrap();
         let client =
-            UPTransportVsomeip::new(&"foo".to_string(), &"me_authority".to_string(), 10, None)
-                .unwrap();
+            UPTransportVsomeip::new(client_uri, &"me_authority".to_string(), None).unwrap();
 
-        let source_filter = UUri {
-            authority_name: "foo".to_string(),
-            ue_id: 0x01,
-            ue_version_major: 1,
-            resource_id: 10,
-            ..Default::default()
-        };
-        let sink_filter = UUri {
-            authority_name: "bar".to_string(),
-            ue_id: 0x02,
-            ue_version_major: 1,
-            resource_id: 20,
-            ..Default::default()
-        };
+        let source_filter = UUri::try_from_parts("foo", 0x01, 1, 10).unwrap();
+        let sink_filter = UUri::try_from_parts("bar", 0x02, 1, 20).unwrap();
         let printing_helper: Arc<dyn UListener> = Arc::new(PrintingListener);
 
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -134,24 +116,18 @@ mod tests {
     async fn test_registering_unregistering_response() {
         test_lib::before_test();
 
-        let client =
-            UPTransportVsomeip::new(&"foo".to_string(), &"me_authority".to_string(), 10, None)
-                .unwrap();
-
-        let source_filter = UUri {
+        let client_uri = UUri {
             authority_name: "foo".to_string(),
-            ue_id: 0x01,
-            ue_version_major: 1,
-            resource_id: 10,
-            ..Default::default()
-        };
-        let sink_filter = UUri {
-            authority_name: "bar".to_string(),
-            ue_id: 0x02,
+            ue_id: 10,
             ue_version_major: 1,
             resource_id: 0,
             ..Default::default()
         };
+        let client =
+            UPTransportVsomeip::new(client_uri, &"me_authority".to_string(), None).unwrap();
+
+        let source_filter = UUri::try_from_parts("foo", 0x01, 1, 10).unwrap();
+        let sink_filter = UUri::try_from_parts("bar", 0x02, 1, 0).unwrap();
         let printing_helper: Arc<dyn UListener> = Arc::new(PrintingListener);
 
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -187,29 +163,23 @@ mod tests {
     async fn test_registering_unregistering_all_point_to_point() {
         test_lib::before_test();
 
+        let client_uri = UUri {
+            authority_name: "foo".to_string(),
+            ue_id: 10,
+            ue_version_major: 1,
+            resource_id: 0,
+            ..Default::default()
+        };
         let client = UPTransportVsomeip::new_with_config(
-            &"foo".to_string(),
+            client_uri,
             &"me_authority".to_string(),
-            10,
             Path::new("vsomeip_configs/example_ustreamer.json"),
             None,
         )
         .unwrap();
 
-        let source_filter = UUri {
-            authority_name: "*".to_string(),
-            ue_id: 0x0000_FFFF,
-            ue_version_major: 0xFF,
-            resource_id: 0xFFFF,
-            ..Default::default()
-        };
-        let sink_filter = UUri {
-            authority_name: "me_authority".to_string(),
-            ue_id: 0x0000_FFFF,
-            ue_version_major: 0xFF,
-            resource_id: 0xFFFF,
-            ..Default::default()
-        };
+        let source_filter = UUri::any();
+        let sink_filter = UUri::try_from_parts("me_authority", 0x0000_FFFF, 0xFF, 0xFFFF).unwrap();
         let printing_helper: Arc<dyn UListener> = Arc::new(PrintingListener);
 
         tokio::time::sleep(Duration::from_millis(100)).await;

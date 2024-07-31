@@ -17,7 +17,6 @@ use crate::utils::{create_request_id, split_u32_to_u16, split_u32_to_u8};
 use crate::{AuthorityName, EventId, InstanceId, ServiceId};
 use cxx::UniquePtr;
 use log::trace;
-use protobuf::Enum;
 use std::sync::Arc;
 use std::time::Duration;
 use up_rust::{UCode, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UUri};
@@ -237,9 +236,11 @@ where {
         let ok = {
             if let Some(commstatus) = umsg.attributes.commstatus {
                 let commstatus = commstatus.enum_value_or(UCode::UNIMPLEMENTED);
+                trace!("UMessage Response commstatus was set to: {commstatus:?}");
                 commstatus == UCode::OK
             } else {
-                false
+                trace!("UMessage Response had no commstatus set");
+                true
             }
         };
         if ok {
@@ -356,21 +357,31 @@ impl VsomeipMessageToUMessage {
             .get_interface_version();
 
         trace!("MT_REQUEST type");
-        let sink = UUri {
-            authority_name: authority_name.to_string(),
-            ue_id: service_id as u32,
-            ue_version_major: interface_version as u32,
-            resource_id: method_id as u32,
-            ..Default::default()
-        };
+        let sink = UUri::try_from_parts(
+            authority_name,
+            service_id as u32, // TODO: Need to address this by adding instance_id in MSB
+            interface_version,
+            method_id,
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build sink UUri for MT_REQUEST type: {e:?}"),
+            )
+        })?;
 
-        let source = UUri {
-            authority_name: mechatronics_authority_name.to_string(),
-            ue_id: client_id as u32,
-            ue_version_major: 1, // TODO: I don't see a way to get this
-            resource_id: 0,      // set to 0 as this is the resource_id of "me"
-            ..Default::default()
-        };
+        let source = UUri::try_from_parts(
+            mechatronics_authority_name,
+            client_id as u32, // TODO: Need to address this by adding instance_id in MSB
+            1,                // TODO: I don't see a way to get this
+            0,                // set to 0 as this is the resource_id of "me"
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build source UUri for MT_REQUEST type: {e:?}"),
+            )
+        })?;
 
         // TODO: Not sure where to get this
         let ttl = 1000;
@@ -424,21 +435,31 @@ impl VsomeipMessageToUMessage {
             .get_interface_version();
 
         trace!("MT_RESPONSE type");
-        let sink = UUri {
-            authority_name: authority_name.to_string(),
-            ue_id: client_id as u32,
-            ue_version_major: 1, // TODO: I don't see a way to get this
-            resource_id: 0,      // set to 0 as this is the resource_id of "me"
-            ..Default::default()
-        };
+        let sink = UUri::try_from_parts(
+            authority_name,
+            client_id as u32, // TODO: Need to address this by adding instance_id in MSB
+            1,                // TODO: I don't see a way to get this
+            0,                // set to 0 as this is the resource_id of "me"
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build sink UUri for MT_RESPONSE type: {e:?}"),
+            )
+        })?;
 
-        let source = UUri {
-            authority_name: mechatronics_authority_name.to_string(),
-            ue_id: service_id as u32,
-            ue_version_major: interface_version as u32,
-            resource_id: method_id as u32,
-            ..Default::default()
-        };
+        let source = UUri::try_from_parts(
+            mechatronics_authority_name,
+            service_id as u32, // TODO: Need to address this by adding instance_id in MSB
+            interface_version,
+            method_id,
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build source UUri for MT_RESPONSE type: {e:?}"),
+            )
+        })?;
 
         trace!(
             "{} - request_id to look up to correlate to req_id: {}",
@@ -448,7 +469,7 @@ impl VsomeipMessageToUMessage {
         let req_id = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
 
         let umsg_res = UMessageBuilder::response(sink, req_id, source)
-            .with_comm_status(UCode::OK.value())
+            .with_comm_status(UCode::OK)
             .build_with_payload(payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_UNSPECIFIED);
 
         let Ok(umsg) = umsg_res else {
@@ -480,21 +501,31 @@ impl VsomeipMessageToUMessage {
             .get_interface_version();
 
         trace!("MT_ERROR type");
-        let sink = UUri {
-            authority_name: authority_name.to_string(),
-            ue_id: client_id as u32,
-            ue_version_major: 1, // TODO: I don't see a way to get this
-            resource_id: 0,      // set to 0 as this is the resource_id of "me"
-            ..Default::default()
-        };
+        let sink = UUri::try_from_parts(
+            authority_name,
+            client_id as u32, // TODO: Need to address this by adding instance_id in MSB
+            1,                // TODO: I don't see a way to get this
+            0,                // set to 0 as this is the resource_id of "me"
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build sink UUri for MT_ERROR type: {e:?}"),
+            )
+        })?;
 
-        let source = UUri {
-            authority_name: mechatronics_authority_name.to_string(),
-            ue_id: service_id as u32,
-            ue_version_major: interface_version as u32,
-            resource_id: method_id as u32,
-            ..Default::default()
-        };
+        let source = UUri::try_from_parts(
+            mechatronics_authority_name,
+            service_id as u32, // TODO: Need to address this by adding instance_id in MSB
+            interface_version,
+            method_id,
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build source UUri for MT_ERROR type: {e:?}"),
+            )
+        })?;
 
         trace!(
             "{} - request_id to look up to correlate to req_id: {}",
@@ -504,7 +535,7 @@ impl VsomeipMessageToUMessage {
         let req_id = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
 
         let umsg_res = UMessageBuilder::response(sink, req_id, source)
-            .with_comm_status(UCode::INTERNAL.value())
+            .with_comm_status(UCode::INTERNAL)
             .build_with_payload(payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_UNSPECIFIED);
 
         let Ok(umsg) = umsg_res else {
@@ -533,13 +564,18 @@ impl VsomeipMessageToUMessage {
         // TODO: Talk with @StevenHartley. It seems like vsomeip notify doesn't let us set the
         //  interface_version... going to set this manually to 1 for now
         let interface_version = 1;
-        let source = UUri {
-            authority_name: mechatronics_authority_name.to_string(), // TODO: Should we set this to anything specific?
-            ue_id: service_id as u32,
-            ue_version_major: interface_version as u32,
-            resource_id: method_id as u32,
-            ..Default::default()
-        };
+        let source = UUri::try_from_parts(
+            mechatronics_authority_name, // TODO: Should we set this to anything specific?
+            service_id as u32,           // TODO: Need to address this by adding instance_id in MSB
+            interface_version,
+            method_id,
+        )
+        .map_err(|e| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Unable to build source UUri for MT_NOTIFICATION type: {e:?}"),
+            )
+        })?;
 
         let umsg_res = UMessageBuilder::publish(source)
             .build_with_payload(payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_UNSPECIFIED);

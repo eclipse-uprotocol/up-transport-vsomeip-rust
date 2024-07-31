@@ -12,15 +12,12 @@
  ********************************************************************************/
 
 use log::{error, info};
-use protobuf::Enum;
 use std::fs::canonicalize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::Instant;
-use up_rust::{
-    UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri,
-};
+use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
 
 const TEST_DURATION: u64 = 1000;
@@ -62,10 +59,6 @@ impl UListener for ResponseListener {
         info!("Response payload_string: {response_payload_string}");
 
         self.received_response.fetch_add(1, Ordering::SeqCst);
-    }
-
-    async fn on_error(&self, err: UStatus) {
-        info!("{:?}", err);
     }
 }
 pub struct RequestListener {
@@ -113,7 +106,7 @@ impl UListener for RequestListener {
         let response_payload_bytes = response_payload_string.into_bytes();
 
         let response_msg = UMessageBuilder::response_for_request(&msg.attributes)
-            .with_comm_status(UCode::OK.value())
+            .with_comm_status(UCode::OK)
             .build_with_payload(response_payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
         let Ok(response_msg) = response_msg else {
             panic!(
@@ -127,20 +120,6 @@ impl UListener for RequestListener {
                 panic!("Unable to send response_msg: {:?}", err);
             }
         }
-    }
-
-    async fn on_error(&self, err: UStatus) {
-        info!("{:?}", err);
-    }
-}
-
-fn any_uuri() -> UUri {
-    UUri {
-        authority_name: "*".to_string(),
-        ue_id: 0x0000_FFFF,     // any instance, any service
-        ue_version_major: 0xFF, // any
-        resource_id: 0xFFFF,    // any
-        ..Default::default()
     }
 }
 
@@ -165,10 +144,10 @@ async fn client_service() {
     let client_config = canonicalize(client_config).ok();
     println!("client_config: {client_config:?}");
 
+    let client_uuri = UUri::try_from_parts(client_authority_name, streamer_ue_id, 1, 0).unwrap();
     let client_res = UPTransportVsomeip::new_with_config(
-        &client_authority_name.to_string(),
+        client_uuri,
         &service_authority_name.to_string(),
-        streamer_ue_id,
         &client_config.unwrap(),
         None,
     );
@@ -179,21 +158,21 @@ async fn client_service() {
 
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
-    let client_uuri = UUri {
-        authority_name: client_authority_name.to_string(),
-        ue_id: client_ue_id as u32,
-        ue_version_major: client_ue_version_major,
-        resource_id: client_resource_id,
-        ..Default::default()
-    };
+    let client_uuri = UUri::try_from_parts(
+        client_authority_name,
+        client_ue_id as u32,
+        client_ue_version_major,
+        client_resource_id,
+    )
+    .unwrap();
 
-    let service_1_uuri_method_a = UUri {
-        authority_name: service_authority_name.to_string(),
-        ue_id: service_1_ue_id as u32,
-        ue_version_major: service_1_ue_version_major,
-        resource_id: service_1_resource_id_a,
-        ..Default::default()
-    };
+    let service_1_uuri_method_a = UUri::try_from_parts(
+        service_authority_name,
+        service_1_ue_id as u32,
+        service_1_ue_version_major,
+        service_1_resource_id_a,
+    )
+    .unwrap();
 
     let response_listener_check = Arc::new(ResponseListener::new());
     let response_listener: Arc<dyn UListener> = response_listener_check.clone();
@@ -215,10 +194,10 @@ async fn client_service() {
     let service_config = canonicalize(service_config).ok();
     println!("service_config: {service_config:?}");
 
+    let service_uuri = UUri::try_from_parts(service_authority_name, streamer_ue_id, 1, 0).unwrap();
     let service_res = UPTransportVsomeip::new_with_config(
-        &service_authority_name.to_string(),
+        service_uuri,
         &client_authority_name.to_string(),
-        streamer_ue_id,
         &service_config.unwrap(),
         None,
     );
@@ -231,19 +210,23 @@ async fn client_service() {
 
     let service = Arc::new(service);
 
-    let service_1_uuri = UUri {
-        authority_name: service_authority_name.to_string(),
-        ue_id: service_1_ue_id as u32,
-        ue_version_major: service_1_ue_version_major,
-        resource_id: service_1_resource_id_a,
-        ..Default::default()
-    };
+    let service_1_uuri = UUri::try_from_parts(
+        service_authority_name,
+        service_1_ue_id as u32,
+        service_1_ue_version_major,
+        service_1_resource_id_a,
+    )
+    .unwrap();
 
     let request_listener_check = Arc::new(RequestListener::new(service.clone()));
     let request_listener: Arc<dyn UListener> = request_listener_check.clone();
 
     let reg_service_1 = service
-        .register_listener(&any_uuri(), Some(&service_1_uuri), request_listener.clone())
+        .register_listener(
+            &UUri::any(),
+            Some(&service_1_uuri),
+            request_listener.clone(),
+        )
         .await;
 
     if let Err(err) = reg_service_1 {
