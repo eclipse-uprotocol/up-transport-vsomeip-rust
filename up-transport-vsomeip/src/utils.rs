@@ -1,23 +1,11 @@
 use crate::{AuthorityName, ClientId, SessionId, SomeIpRequestId, UeId};
 use up_rust::UUri;
 
-// TODO: use function from up-rust when merged
-/// Creates a completely wildcarded [UUri]
-pub fn any_uuri() -> UUri {
-    UUri {
-        authority_name: "*".to_string(),
-        ue_id: 0x0000_FFFF,     // any instance, any service
-        ue_version_major: 0xFF, // any
-        resource_id: 0xFFFF,    // any
-        ..Default::default()
-    }
-}
-
 /// Creates a [UUri] with specified [UUri::authority_name] and [UUri::ue_id]
 pub fn any_uuri_fixed_authority_id(authority_name: &AuthorityName, ue_id: UeId) -> UUri {
     UUri {
         authority_name: authority_name.to_string(),
-        ue_id: ue_id as u32,
+        ue_id,
         ue_version_major: 0xFF, // any
         resource_id: 0xFFFF,    // any
         ..Default::default()

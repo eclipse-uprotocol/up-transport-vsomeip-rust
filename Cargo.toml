@@ -50,7 +50,7 @@ regex = { version = "1.10" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 tokio = { version = "1.35.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "tracing"] }
-up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "3a50104421a801d52e1d9c68979db54c013ce43d" }
+up-rust = { version = "0.1.5" }
 vsomeip-proc-macro = { path = "vsomeip-proc-macro" }
 vsomeip-sys = { path = "vsomeip-sys", default-features = false }
 

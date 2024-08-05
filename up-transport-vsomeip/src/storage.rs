@@ -45,8 +45,7 @@ use vsomeip_sys::glue::{AvailableStateHandlerFnPtr, MessageHandlerFnPtr};
 use vsomeip_sys::vsomeip;
 
 pub struct UPTransportVsomeipStorage {
-    ue_id: UeId,
-    local_authority: AuthorityName,
+    uri: UUri,
     remote_authority: AuthorityName,
     runtime_handle: Handle,
     message_handler_registry: Arc<InMemoryMessageHandlerRegistry>,
@@ -57,18 +56,12 @@ pub struct UPTransportVsomeipStorage {
 }
 
 impl UPTransportVsomeipStorage {
-    pub fn new(
-        local_authority: AuthorityName,
-        remote_authority: AuthorityName,
-        ue_id: UeId,
-        runtime_handle: Handle,
-    ) -> Self {
+    pub fn new(uri: UUri, remote_authority: AuthorityName, runtime_handle: Handle) -> Self {
         let application_state_handler_registry =
             InMemoryApplicationStateAvailabilityHandlerRegistry::new_trait_obj();
 
         Self {
-            ue_id,
-            local_authority,
+            uri,
             remote_authority,
             runtime_handle,
             message_handler_registry: Arc::new(InMemoryMessageHandlerRegistry::new()),
@@ -79,11 +72,15 @@ impl UPTransportVsomeipStorage {
         }
     }
 
+    pub fn get_uri(&self) -> UUri {
+        self.uri.clone()
+    }
+
     pub fn get_runtime_handle(&self) -> Handle {
         self.runtime_handle.clone()
     }
     pub fn get_local_authority(&self) -> AuthorityName {
-        self.local_authority.clone()
+        self.uri.authority_name.clone()
     }
 
     pub fn get_remote_authority(&self) -> AuthorityName {
@@ -91,7 +88,7 @@ impl UPTransportVsomeipStorage {
     }
 
     pub fn get_ue_id(&self) -> UeId {
-        self.ue_id
+        self.uri.ue_id
     }
 }
 

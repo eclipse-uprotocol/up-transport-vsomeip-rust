@@ -1,3 +1,16 @@
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
 use async_trait::async_trait;
 use hello_world_protos::hello_world_service::{HelloRequest, HelloResponse};
 use log::{error, trace};
@@ -5,10 +18,12 @@ use std::fs::canonicalize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
+use up_rust::communication::{
+    InMemoryRpcServer, RequestHandler, RpcServer, ServiceInvocationError, UPayload,
+};
 use up_rust::UPayloadFormat::UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY;
-use up_rust::{UListener, UMessage, UMessageBuilder, UStatus, UTransport, UUri};
+use up_rust::{UCode, UStatus, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
-use up_transport_vsomeip::UeId;
 
 const HELLO_SERVICE_ID: u16 = 0x6000;
 const HELLO_INSTANCE_ID: u32 = 0x0001;
@@ -31,27 +46,28 @@ const _CLIENT_RESOURCE_ID: u16 = 0;
 
 const _REQUEST_TTL: u32 = 1000;
 
-struct ServiceRequestResponder {
-    client: Arc<dyn UTransport>,
-}
-impl ServiceRequestResponder {
-    pub fn new(client: Arc<dyn UTransport>) -> Self {
-        Self { client }
+struct ServiceRequestHandler;
+impl ServiceRequestHandler {
+    pub fn new() -> Self {
+        Self
     }
 }
 #[async_trait]
-impl UListener for ServiceRequestResponder {
-    async fn on_receive(&self, msg: UMessage) {
-        println!("ServiceRequestResponder: Received a message: {msg:?}");
+impl RequestHandler for ServiceRequestHandler {
+    async fn handle_request(
+        &self,
+        resource_id: u16,
+        request_payload: Option<UPayload>,
+    ) -> Result<Option<UPayload>, ServiceInvocationError> {
+        println!("ServiceRequestHandler: Received a resource_id: {resource_id} request_payload: {request_payload:?}");
 
-        let mut msg = msg.clone();
-
-        if let Some(ref mut attributes) = msg.attributes.as_mut() {
-            attributes.payload_format =
-                ::protobuf::EnumOrUnknown::new(UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY);
-        }
-
-        let hello_request = msg.extract_protobuf_payload::<HelloRequest>();
+        let hello_request_vsomeip_unspecified_payload_format = request_payload.unwrap();
+        let hello_request_protobuf_payload_format = UPayload::new(
+            hello_request_vsomeip_unspecified_payload_format.payload(),
+            UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY,
+        );
+        let hello_request =
+            hello_request_protobuf_payload_format.extract_protobuf::<HelloRequest>();
 
         let hello_request = match hello_request {
             Ok(hello_request) => {
@@ -60,7 +76,10 @@ impl UListener for ServiceRequestResponder {
             }
             Err(err) => {
                 error!("Unable to parse HelloRequest: {err:?}");
-                return;
+                return Err(ServiceInvocationError::RpcError(UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    "Unable to parse hello_request",
+                )));
             }
         };
 
@@ -69,14 +88,9 @@ impl UListener for ServiceRequestResponder {
             ..Default::default()
         };
 
-        let response_msg = UMessageBuilder::response_for_request(msg.attributes.as_ref().unwrap())
-            .build_with_wrapped_protobuf_payload(&hello_response)
-            .unwrap();
-        self.client.send(response_msg).await.unwrap();
-    }
+        println!("Making response to send back: {hello_response:?}");
 
-    async fn on_error(&self, err: UStatus) {
-        println!("ServiceRequestResponder: Encountered an error: {err:?}");
+        Ok(Some(UPayload::try_from_protobuf(hello_response).unwrap()))
     }
 }
 
@@ -94,41 +108,30 @@ async fn main() -> Result<(), UStatus> {
 
     // There will be a single vsomeip_transport, as there is a connection into device and a streamer
     // TODO: Add error handling if we fail to create a UPTransportVsomeip
-    let service: Arc<dyn UTransport> = Arc::new(
+    let service_uuri = UUri::try_from_parts(
+        HELLO_SERVICE_AUTHORITY,
+        HELLO_SERVICE_UE_ID,
+        HELLO_SERVICE_MAJOR,
+        // HELLO_SERVICE_RESOURCE_ID,
+        0,
+    )
+    .unwrap();
+    let service = Arc::new(
         UPTransportVsomeip::new_with_config(
-            &HELLO_SERVICE_AUTHORITY.to_string(),
+            service_uuri,
             &CLIENT_AUTHORITY.to_string(),
-            HELLO_SERVICE_UE_ID as UeId,
             &vsomeip_config.unwrap(),
             None,
         )
         .unwrap(),
     );
+    let l2_service = InMemoryRpcServer::new(service.clone(), service.clone());
 
-    let source_filter = UUri {
-        authority_name: "*".to_string(),
-        ue_id: 0x0000_FFFF,
-        ue_version_major: 0xFF,
-        resource_id: 0xFFFF,
-        ..Default::default()
-    };
-    let sink_filter = UUri {
-        authority_name: HELLO_SERVICE_AUTHORITY.to_string(),
-        ue_id: HELLO_SERVICE_UE_ID,
-        ue_version_major: HELLO_SERVICE_MAJOR as u32,
-        resource_id: HELLO_SERVICE_RESOURCE_ID as u32,
-        ..Default::default()
-    };
-    let service_request_responder: Arc<dyn UListener> =
-        Arc::new(ServiceRequestResponder::new(service.clone()));
-    // TODO: Need to revisit how the vsomeip config file is used in non point-to-point cases
-    service
-        .register_listener(
-            &source_filter,
-            Some(&sink_filter),
-            service_request_responder.clone(),
-        )
-        .await?;
+    let service_request_handler = Arc::new(ServiceRequestHandler::new());
+    l2_service
+        .register_endpoint(None, HELLO_SERVICE_RESOURCE_ID, service_request_handler)
+        .await
+        .expect("Unable to register endpoint");
 
     thread::park();
     Ok(())

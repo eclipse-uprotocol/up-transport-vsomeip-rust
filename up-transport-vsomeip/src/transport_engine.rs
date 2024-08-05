@@ -16,13 +16,8 @@ use crate::message_conversions::UMessageToVsomeipMessage;
 use crate::storage::application_state_availability_handler_registry::ApplicationStateAvailabilityHandlerRegistry;
 use crate::storage::rpc_correlation::RpcCorrelationRegistry;
 use crate::storage::vsomeip_offered_requested::VsomeipOfferedRequestedRegistry;
-use crate::transport_inner::{
-    UP_CLIENT_VSOMEIP_FN_TAG_APP_EVENT_LOOP, UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL,
-    UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER_INTERNAL, UP_CLIENT_VSOMEIP_FN_TAG_START_APP,
-    UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL, UP_CLIENT_VSOMEIP_TAG,
-};
 use crate::utils::{split_u32_to_u16, split_u32_to_u8};
-use crate::{ApplicationName, ClientId, UeId};
+use crate::{ApplicationName, ClientId};
 use cxx::{let_cxx_string, UniquePtr};
 use log::{error, info, trace};
 use std::path::{Path, PathBuf};
@@ -38,6 +33,19 @@ use vsomeip_sys::glue::{
     MessageHandlerFnPtr, RuntimeWrapper,
 };
 use vsomeip_sys::vsomeip;
+
+pub const UP_CLIENT_VSOMEIP_TAG: &str = "UPTransportVsomeipEngine";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_APP_EVENT_LOOP: &str = "app_event_loop";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_REGISTER_LISTENER_INTERNAL: &str = "register_listener_internal";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_UNREGISTER_LISTENER_INTERNAL: &str =
+    "unregister_listener_internal";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_SEND_INTERNAL: &str = "send_internal";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_INITIALIZE_NEW_APP_INTERNAL: &str =
+    "initialize_new_app_internal";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_START_APP: &str = "start_app";
+pub const UP_CLIENT_VSOMEIP_FN_TAG_STOP_APP: &str = "stop_app";
+
+pub const INTERNAL_FUNCTION_TIMEOUT: u64 = 3;
 
 pub enum TransportCommand {
     // Primary purpose of a UTransport
@@ -80,15 +88,15 @@ pub enum TransportCommand {
     ),
 }
 
-pub struct UPTransportVsomeipInnerEngine {
+pub struct UPTransportVsomeipEngine {
     pub(crate) transport_command_sender: Sender<TransportCommand>,
 }
 
-impl UPTransportVsomeipInnerEngine {
-    pub fn new(ue_id: UeId, config_path: Option<&Path>) -> Self {
+impl UPTransportVsomeipEngine {
+    pub fn new(uri: UUri, config_path: Option<&Path>) -> Self {
         let (tx, rx) = channel(10000);
 
-        Self::start_event_loop(ue_id, rx, config_path);
+        Self::start_event_loop(uri, rx, config_path);
 
         Self {
             transport_command_sender: tx,
@@ -96,7 +104,7 @@ impl UPTransportVsomeipInnerEngine {
     }
 
     fn start_event_loop(
-        ue_id: UeId,
+        uri: UUri,
         rx_to_event_loop: Receiver<TransportCommand>,
         config_path: Option<&Path>,
     ) {
@@ -113,7 +121,7 @@ impl UPTransportVsomeipInnerEngine {
 
             runtime.block_on(async move {
                 trace!("Within blocked runtime");
-                Self::event_loop(ue_id, rx_to_event_loop, config_path).await;
+                Self::event_loop(uri, rx_to_event_loop, config_path).await;
                 info!("Broke out of loop! You probably dropped the UPClientVsomeip");
             });
             trace!("Parking dedicated thread");
@@ -233,7 +241,7 @@ impl UPTransportVsomeipInnerEngine {
     }
 
     async fn event_loop(
-        ue_id: UeId,
+        uri: UUri,
         mut rx_to_event_loop: Receiver<TransportCommand>,
         config_path: Option<PathBuf>,
     ) {
@@ -408,7 +416,7 @@ impl UPTransportVsomeipInnerEngine {
                     Self::return_oneshot_result(stop_res, return_channel).await;
                 }
             }
-            trace!("Hit bottom of event loop, ue_id: {ue_id}");
+            trace!("Hit bottom of event loop, uri: {uri:?}");
         }
     }
 

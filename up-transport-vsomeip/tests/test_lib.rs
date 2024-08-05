@@ -12,7 +12,7 @@
  ********************************************************************************/
 
 use std::sync::Once;
-use up_rust::{UListener, UMessage, UStatus};
+use up_rust::{UListener, UMessage};
 
 static INIT: Once = Once::new();
 pub fn before_test() {
@@ -24,9 +24,5 @@ pub struct PrintingListener;
 impl UListener for PrintingListener {
     async fn on_receive(&self, msg: UMessage) {
         println!("{:?}", msg);
-    }
-
-    async fn on_error(&self, err: UStatus) {
-        println!("{:?}", err);
     }
 }

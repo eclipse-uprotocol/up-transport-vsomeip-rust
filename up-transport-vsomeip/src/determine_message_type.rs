@@ -110,9 +110,9 @@ fn determine_type(
                 }
                 Some(ue_id) => ue_id,
             },
-            DeterminationType::Send => source_filter.ue_id as ClientId,
+            DeterminationType::Send => source_filter.ue_id,
         };
-        Ok(RegistrationType::Publish(client_id))
+        Ok(RegistrationType::Publish(client_id as ClientId))
     }
 }
 
