@@ -153,7 +153,10 @@ async fn client_service() {
     );
 
     let Ok(client) = client_res else {
-        panic!("Unable to establish client");
+        panic!(
+            "Unable to establish client: {:?}",
+            client_res.err().unwrap()
+        );
     };
 
     tokio::time::sleep(Duration::from_millis(1000)).await;
