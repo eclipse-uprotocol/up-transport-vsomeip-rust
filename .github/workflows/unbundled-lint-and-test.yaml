@@ -27,8 +27,10 @@ on:
     branches: [ main ]
   pull_request:
     paths:
-      - "src/**"
-      - "Cargo.*"
+      - ".github/**"
+      - "**/include/**"
+      - "**/src/**"
+      - "**/Cargo.*"
   workflow_call:
   workflow_dispatch:
 
