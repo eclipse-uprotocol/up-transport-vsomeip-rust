@@ -233,32 +233,24 @@ where {
             client_id,
             session_id
         );
-        let ok = {
+
+        let (commstatus, vsomeip_msg_type) = {
             if let Some(commstatus) = umsg.attributes.commstatus {
-                let commstatus = commstatus.enum_value_or(UCode::UNIMPLEMENTED);
-                trace!("UMessage Response commstatus was set to: {commstatus:?}");
-                commstatus == UCode::OK
+                (
+                    commstatus.enum_value_or(UCode::UNIMPLEMENTED),
+                    message_type_e::MT_ERROR,
+                )
             } else {
-                trace!("UMessage Response had no commstatus set");
-                true
+                (UCode::UNIMPLEMENTED, message_type_e::MT_RESPONSE)
             }
         };
-        if ok {
-            vsomeip_msg
-                .get_message_base_pinned()
-                .set_return_code(vsomeip::return_code_e::E_OK);
-            vsomeip_msg
-                .get_message_base_pinned()
-                .set_message_type(message_type_e::MT_RESPONSE);
-        } else {
-            // TODO: Perform mapping from uProtocol UCode contained in commstatus into vsomeip::return_code_e
-            vsomeip_msg
-                .get_message_base_pinned()
-                .set_return_code(vsomeip::return_code_e::E_NOT_OK);
-            vsomeip_msg
-                .get_message_base_pinned()
-                .set_message_type(message_type_e::MT_ERROR);
-        }
+
+        vsomeip_msg
+            .get_message_base_pinned()
+            .set_return_code(Self::ucode_to_vsomeip_err_code(commstatus));
+        vsomeip_msg
+            .get_message_base_pinned()
+            .set_message_type(vsomeip_msg_type);
 
         trace!(
             "{} - Response: Finished building vsomeip message: service_id: {} instance_id: {}",
@@ -268,6 +260,22 @@ where {
         );
 
         Ok(vsomeip_msg)
+    }
+
+    fn ucode_to_vsomeip_err_code(ucode: UCode) -> vsomeip::return_code_e {
+        // TODO handle the one-to-many mapping. eg: INVALID_ARGUMENT <==> E_WRONG_MESSAGE_TYPE / E_UNKNOWN_METHOD
+        match ucode {
+            UCode::OK => vsomeip::return_code_e::E_OK,
+            UCode::INVALID_ARGUMENT => vsomeip::return_code_e::E_WRONG_MESSAGE_TYPE,
+            UCode::DEADLINE_EXCEEDED => vsomeip::return_code_e::E_TIMEOUT,
+            UCode::NOT_FOUND => vsomeip::return_code_e::E_UNKNOWN_SERVICE,
+            UCode::UNAVAILABLE => vsomeip::return_code_e::E_UNKNOWN_SERVICE,
+            UCode::DATA_LOSS => vsomeip::return_code_e::E_MALFORMED_MESSAGE,
+            UCode::INTERNAL => vsomeip::return_code_e::E_NOT_REACHABLE,
+            UCode::UNKNOWN => vsomeip::return_code_e::E_NOT_OK,
+            UCode::FAILED_PRECONDITION => vsomeip::return_code_e::E_WRONG_PROTOCOL_VERSION,
+            _ => vsomeip::return_code_e::E_UNKNOWN,
+        }
     }
 }
 
@@ -533,9 +541,12 @@ impl VsomeipMessageToUMessage {
             request_id
         );
         let req_id = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
+        let comm_status = Self::vsomeip_err_code_to_ucode(
+            vsomeip_message.get_message_base_pinned().get_return_code(),
+        );
 
         let umsg_res = UMessageBuilder::response(sink, req_id, source)
-            .with_comm_status(UCode::INTERNAL)
+            .with_comm_status(comm_status)
             .build_with_payload(payload_bytes, UPayloadFormat::UPAYLOAD_FORMAT_UNSPECIFIED);
 
         let Ok(umsg) = umsg_res else {
@@ -591,6 +602,23 @@ impl VsomeipMessageToUMessage {
         };
 
         Ok(umsg)
+    }
+
+    fn vsomeip_err_code_to_ucode(someip_error: vsomeip::return_code_e) -> UCode {
+        match someip_error {
+            vsomeip::return_code_e::E_OK => UCode::OK,
+            vsomeip::return_code_e::E_WRONG_MESSAGE_TYPE
+            | vsomeip::return_code_e::E_UNKNOWN_METHOD => UCode::INVALID_ARGUMENT,
+            vsomeip::return_code_e::E_TIMEOUT => UCode::DEADLINE_EXCEEDED,
+            vsomeip::return_code_e::E_UNKNOWN_SERVICE => UCode::NOT_FOUND,
+            vsomeip::return_code_e::E_NOT_READY => UCode::UNAVAILABLE,
+            vsomeip::return_code_e::E_MALFORMED_MESSAGE => UCode::DATA_LOSS,
+            vsomeip::return_code_e::E_NOT_REACHABLE => UCode::INTERNAL,
+            vsomeip::return_code_e::E_NOT_OK => UCode::UNKNOWN,
+            vsomeip::return_code_e::E_WRONG_PROTOCOL_VERSION
+            | vsomeip::return_code_e::E_WRONG_INTERFACE_VERSION => UCode::FAILED_PRECONDITION,
+            _ => UCode::UNKNOWN,
+        }
     }
 }
 
