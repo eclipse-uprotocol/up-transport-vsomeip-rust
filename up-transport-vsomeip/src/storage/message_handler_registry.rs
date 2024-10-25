@@ -13,11 +13,11 @@
 
 use crate::message_conversions::VsomeipMessageToUMessage;
 use crate::storage::UPTransportVsomeipStorage;
-use crate::{ClientId, MessageHandlerId};
+use crate::MessageHandlerId;
 use bimap::BiMap;
 use cxx::SharedPtr;
 use lazy_static::lazy_static;
-use log::{debug, error, info, trace, warn};
+use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error;
@@ -116,16 +116,10 @@ impl Display for MessageHandlerIdAndListenerConfigError {
 
 impl error::Error for MessageHandlerIdAndListenerConfigError {}
 
-pub enum ClientUsage {
-    ClientIdInUse,
-    ClientIdNotInUse(ClientId),
-}
-
 pub trait MessageHandlerRegistry {
     /// Gets an unused [MessageHandlerFnPtr] to hand over to a vsomeip application
     fn get_message_handler(
         &self,
-        client_id: ClientId,
         transport_storage: Arc<UPTransportVsomeipStorage>,
         listener_config: (UUri, Option<UUri>, ComparableListener),
     ) -> Result<MessageHandlerFnPtr, GetMessageHandlerError>;
@@ -134,7 +128,7 @@ pub trait MessageHandlerRegistry {
     fn release_message_handler(
         &self,
         listener_config: (UUri, Option<UUri>, ComparableListener),
-    ) -> Result<ClientUsage, UStatus>;
+    ) -> Result<(), UStatus>;
 
     /// Get all listener configs
     fn get_all_listener_configs(&self) -> Vec<(UUri, Option<UUri>, ComparableListener)>;
@@ -148,27 +142,20 @@ pub trait MessageHandlerRegistry {
 
 type MessageHandlerIdAndListenerConfig =
     BiMap<MessageHandlerId, (UUri, Option<UUri>, ComparableListener)>;
-type MessageHandlerIdToClientId = HashMap<MessageHandlerId, ClientId>;
-type ClientIdToMessageHandlerId = HashMap<ClientId, HashSet<MessageHandlerId>>;
 pub struct InMemoryMessageHandlerRegistry {
     message_handler_id_and_listener_config: RwLock<MessageHandlerIdAndListenerConfig>,
-    message_handler_id_to_client_id: RwLock<MessageHandlerIdToClientId>,
-    client_id_to_message_handler_id: RwLock<ClientIdToMessageHandlerId>,
 }
 
 impl InMemoryMessageHandlerRegistry {
     pub fn new() -> Self {
         Self {
             message_handler_id_and_listener_config: RwLock::new(BiMap::new()),
-            message_handler_id_to_client_id: RwLock::new(HashMap::new()),
-            client_id_to_message_handler_id: RwLock::new(HashMap::new()),
         }
     }
 
     /// Gets an unused [MessageHandlerFnPtr] to hand over to a vsomeip application
     pub fn get_message_handler(
         &self,
-        client_id: ClientId,
         transport_storage: Arc<UPTransportVsomeipStorage>,
         listener_config: (UUri, Option<UUri>, ComparableListener),
     ) -> Result<MessageHandlerFnPtr, GetMessageHandlerError> {
@@ -181,10 +168,6 @@ impl InMemoryMessageHandlerRegistry {
 
         let mut message_handler_id_and_listener_config =
             self.message_handler_id_and_listener_config.write().unwrap();
-        let mut message_handler_id_to_client_id =
-            self.message_handler_id_to_client_id.write().unwrap();
-        let mut client_id_to_message_handler_id =
-            self.client_id_to_message_handler_id.write().unwrap();
 
         let (source_filter, sink_filter, comparable_listener) = listener_config;
 
@@ -231,47 +214,11 @@ impl InMemoryMessageHandlerRegistry {
             }
         }));
 
-        let insert_res = Self::insert_message_handler_id_client_id(
-            message_handler_id_to_client_id.deref_mut(),
-            client_id_to_message_handler_id.deref_mut(),
-            message_handler_id,
-            client_id,
-        );
-        if let Some(previous_entry) = insert_res {
-            let message_handler_id = previous_entry.0;
-            let client_id = previous_entry.1;
-
-            for rollback_step in rollback_steps {
-                rollback_step();
-            }
-
-            return Err(GetMessageHandlerError::OtherError(
-                format!("{:?}", UStatus::fail_with_code(
-                    UCode::ALREADY_EXISTS, format!(
-                        "We already had used that listener_id with a client_id. listener_id: {} client_id: {}",
-                        message_handler_id, client_id))
-                )
-            )
-            );
-        }
-
         let listener_config = (
             source_filter.clone(),
             sink_filter.clone(),
             comparable_listener.clone(),
         );
-
-        rollback_steps.push(Box::new(move || {
-            if Self::remove_client_id_based_on_message_handler_id(
-                message_handler_id_to_client_id.deref_mut(),
-                client_id_to_message_handler_id.deref_mut(),
-                message_handler_id,
-            )
-            .is_none()
-            {
-                warn!("No client_id found to remove for message_handler_id: {message_handler_id}");
-            }
-        }));
 
         let insert_res = Self::insert_message_handler_id_and_listener_config(
             message_handler_id_and_listener_config.deref_mut(),
@@ -311,7 +258,7 @@ impl InMemoryMessageHandlerRegistry {
     pub fn release_message_handler(
         &self,
         listener_config: (UUri, Option<UUri>, ComparableListener),
-    ) -> Result<ClientUsage, UStatus> {
+    ) -> Result<(), UStatus> {
         // Lock all the necessary state at the beginning so we don't have partial transactions
         let mut message_handler_id_to_transport_storage =
             MESSAGE_HANDLER_ID_TO_TRANSPORT_STORAGE.write().unwrap();
@@ -321,10 +268,6 @@ impl InMemoryMessageHandlerRegistry {
 
         let mut message_handler_id_and_listener_config =
             self.message_handler_id_and_listener_config.write().unwrap();
-        let mut message_handler_id_to_client_id =
-            self.message_handler_id_to_client_id.write().unwrap();
-        let mut client_id_to_message_handler_id =
-            self.client_id_to_message_handler_id.write().unwrap();
 
         let message_handler_id = Self::get_message_handler_id_for_listener_config(
             message_handler_id_and_listener_config.deref_mut(),
@@ -357,33 +300,7 @@ impl InMemoryMessageHandlerRegistry {
             warn!("{warn}");
         }
 
-        let client_id = {
-            match Self::remove_client_id_based_on_message_handler_id(
-                message_handler_id_to_client_id.deref_mut(),
-                client_id_to_message_handler_id.deref_mut(),
-                message_handler_id,
-            ) {
-                None => {
-                    return Err(UStatus::fail_with_code(
-                        UCode::NOT_FOUND,
-                        format!(
-                            "No client_id found to remove for listener_id: {message_handler_id}"
-                        ),
-                    ));
-                }
-                Some(client_id) => client_id,
-            }
-        };
-
-        if Self::message_handler_count_for_client_id(
-            client_id_to_message_handler_id.deref_mut(),
-            client_id,
-        ) == 0
-        {
-            Ok(ClientUsage::ClientIdNotInUse(client_id))
-        } else {
-            Ok(ClientUsage::ClientIdInUse)
-        }
+        Ok(())
     }
 
     /// Get all listener configs
@@ -526,48 +443,6 @@ impl InMemoryMessageHandlerRegistry {
         }
     }
 
-    /// Insert [MessageHandlerId] and [ClientId]
-    fn insert_message_handler_id_client_id(
-        message_handler_id_to_client_id: &mut HashMap<usize, u16>,
-        client_id_to_message_handler_id: &mut HashMap<u16, HashSet<usize>>,
-        message_handler_id: MessageHandlerId,
-        client_id: ClientId,
-    ) -> Option<(usize, ClientId)> {
-        debug!("before listener_id_to_client_id: {message_handler_id_to_client_id:?}");
-
-        if message_handler_id_to_client_id.contains_key(&message_handler_id) {
-            info!("We already used message_handler_id: {message_handler_id}");
-            debug!("message_handler_id_to_client_id: {message_handler_id_to_client_id:?}");
-
-            let client_id = message_handler_id_to_client_id
-                .get(&message_handler_id)
-                .unwrap();
-            return Some((message_handler_id, *client_id));
-        }
-
-        let insert_res = message_handler_id_to_client_id.insert(message_handler_id, client_id);
-        if let Some(client_id) = insert_res {
-            info!("We already inserted message_handler_id: {message_handler_id} with client_id: {client_id}");
-
-            return Some((message_handler_id, client_id));
-        }
-
-        let message_handler_ids = client_id_to_message_handler_id
-            .entry(client_id)
-            .or_default();
-        let newly_added = message_handler_ids.insert(message_handler_id);
-        if !newly_added {
-            info!("Attempted to inserted already existing message_handler_id: {message_handler_id} into client_id: {client_id}");
-
-            return Some((message_handler_id, client_id));
-        }
-
-        info!("Newly added message_handler_id: {message_handler_id} client_id: {client_id}");
-        debug!("after message_handler_id_to_client_id: {message_handler_id_to_client_id:?}");
-
-        None
-    }
-
     /// Remove [MessageHandlerId] and listener configuration
     fn remove_message_handler_id_and_listener_config_based_on_message_handler_id(
         message_handler_id_and_listener_config: &mut BiMap<
@@ -585,25 +460,6 @@ impl InMemoryMessageHandlerRegistry {
         }
 
         Ok(())
-    }
-
-    /// Remove [ClientId] based on [MessageHandlerId]
-    fn remove_client_id_based_on_message_handler_id(
-        message_handler_id_to_client_id: &mut HashMap<usize, u16>,
-        client_id_to_message_handler_id: &mut HashMap<u16, HashSet<usize>>,
-        message_handler_id: usize,
-    ) -> Option<ClientId> {
-        let removed = message_handler_id_to_client_id.remove(&message_handler_id);
-        if let Some(client_id) = removed {
-            client_id_to_message_handler_id
-                .entry(client_id)
-                .or_default()
-                .remove(&message_handler_id);
-
-            return Some(client_id);
-        }
-
-        None
     }
 
     /// Insert [MessageHandlerId] and listener configuration
@@ -638,19 +494,6 @@ impl InMemoryMessageHandlerRegistry {
         }
 
         Ok(())
-    }
-
-    /// Find count of listeners registered to [ClientId]
-    fn message_handler_count_for_client_id(
-        client_id_to_message_handler_id: &mut HashMap<u16, HashSet<usize>>,
-        client_id: ClientId,
-    ) -> usize {
-        let message_handler_ids = client_id_to_message_handler_id.get(&client_id);
-        if let Some(listener_ids) = message_handler_ids {
-            return listener_ids.len();
-        }
-
-        0
     }
 }
 

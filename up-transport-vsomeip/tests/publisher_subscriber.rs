@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
-use up_transport_vsomeip::UPTransportVsomeip;
+use up_transport_vsomeip::{UPTransportVsomeip, VsomeipApplicationConfig};
 
 const TEST_DURATION: u64 = 1000;
 
@@ -68,10 +68,17 @@ async fn publisher_subscriber() {
     let publisher_topic =
         UUri::try_from_parts(authority_name, ue_id, ue_version_major, resource_id).unwrap();
 
+    let vsomeip_application_config_subscriber =
+        VsomeipApplicationConfig::new("subscriber_app", 0x344);
     let subscriber_uri =
         UUri::try_from_parts(authority_name, subscriber_ue_id, ue_version_major, 0).unwrap();
 
-    let subscriber_res = UPTransportVsomeip::new(subscriber_uri, &"me_authority".to_string(), None);
+    let subscriber_res = UPTransportVsomeip::new(
+        vsomeip_application_config_subscriber,
+        subscriber_uri,
+        &"me_authority".to_string(),
+        None,
+    );
 
     let Ok(subscriber) = subscriber_res else {
         panic!("Unable to establish subscriber");
@@ -92,8 +99,15 @@ async fn publisher_subscriber() {
 
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
+    let vsomeip_application_config_publisher =
+        VsomeipApplicationConfig::new("publisher_app", 0x343);
     let publisher_uri = UUri::try_from_parts(authority_name, ue_id, 1, 0).unwrap();
-    let publisher_res = UPTransportVsomeip::new(publisher_uri, &"me_authority".to_string(), None);
+    let publisher_res = UPTransportVsomeip::new(
+        vsomeip_application_config_publisher,
+        publisher_uri,
+        &"me_authority".to_string(),
+        None,
+    );
 
     let Ok(publisher) = publisher_res else {
         panic!("Unable to establish publisher");

@@ -11,20 +11,15 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-pub mod application_registry;
 pub mod application_state_availability_handler_registry;
 pub mod message_handler_registry;
 pub mod rpc_correlation;
 pub mod vsomeip_offered_requested;
 
-use crate::storage::application_registry::ApplicationRegistry;
-use crate::storage::message_handler_registry::{
-    ClientUsage, GetMessageHandlerError, MessageHandlerRegistry,
-};
+use crate::storage::message_handler_registry::{GetMessageHandlerError, MessageHandlerRegistry};
 use crate::storage::rpc_correlation::RpcCorrelationRegistry;
 use crate::storage::vsomeip_offered_requested::VsomeipOfferedRequestedRegistry;
 use crate::storage::{
-    application_registry::InMemoryApplicationRegistry,
     application_state_availability_handler_registry::{
         ApplicationStateAvailabilityHandlerRegistry,
         InMemoryApplicationStateAvailabilityHandlerRegistry,
@@ -33,9 +28,10 @@ use crate::storage::{
     rpc_correlation::InMemoryRpcCorrelationRegistry,
     vsomeip_offered_requested::InMemoryVsomeipOfferedRequestedRegistry,
 };
+use crate::vsomeip_config::VsomeipApplicationConfig;
 use crate::{
-    ApplicationName, AuthorityName, ClientId, EventId, InstanceId, MethodId, ServiceId, SessionId,
-    SomeIpRequestId, UProtocolReqId, UeId,
+    AuthorityName, ClientId, EventId, InstanceId, MethodId, ServiceId, SessionId, SomeIpRequestId,
+    UProtocolReqId, UeId,
 };
 use crossbeam_channel::Receiver;
 use std::sync::Arc;
@@ -45,28 +41,33 @@ use vsomeip_sys::glue::{AvailableStateHandlerFnPtr, MessageHandlerFnPtr};
 use vsomeip_sys::vsomeip;
 
 pub struct UPTransportVsomeipStorage {
+    vsomeip_application_config: VsomeipApplicationConfig,
     uri: UUri,
     remote_authority: AuthorityName,
     runtime_handle: Handle,
     message_handler_registry: Arc<InMemoryMessageHandlerRegistry>,
     application_state_handler_registry: Arc<InMemoryApplicationStateAvailabilityHandlerRegistry>,
-    application_registry: Arc<InMemoryApplicationRegistry>,
     rpc_correlation: Arc<InMemoryRpcCorrelationRegistry>,
     vsomeip_offered_requested: Arc<InMemoryVsomeipOfferedRequestedRegistry>,
 }
 
 impl UPTransportVsomeipStorage {
-    pub fn new(uri: UUri, remote_authority: AuthorityName, runtime_handle: Handle) -> Self {
+    pub fn new(
+        vsomeip_application_config: VsomeipApplicationConfig,
+        uri: UUri,
+        remote_authority: AuthorityName,
+        runtime_handle: Handle,
+    ) -> Self {
         let application_state_handler_registry =
             InMemoryApplicationStateAvailabilityHandlerRegistry::new_trait_obj();
 
         Self {
+            vsomeip_application_config,
             uri,
             remote_authority,
             runtime_handle,
             message_handler_registry: Arc::new(InMemoryMessageHandlerRegistry::new()),
             application_state_handler_registry,
-            application_registry: Arc::new(InMemoryApplicationRegistry::new()),
             rpc_correlation: Arc::new(InMemoryRpcCorrelationRegistry::new()),
             vsomeip_offered_requested: Arc::new(InMemoryVsomeipOfferedRequestedRegistry::new()),
         }
@@ -89,6 +90,10 @@ impl UPTransportVsomeipStorage {
 
     pub fn get_ue_id(&self) -> UeId {
         self.uri.ue_id
+    }
+
+    pub fn get_vsomeip_application_config(&self) -> VsomeipApplicationConfig {
+        self.vsomeip_application_config.clone()
     }
 }
 
@@ -237,45 +242,20 @@ impl VsomeipOfferedRequestedRegistry for UPTransportVsomeipStorage {
     }
 }
 
-impl ApplicationRegistry for UPTransportVsomeipStorage {
-    fn get_app_name_for_client_id(&self, client_id: ClientId) -> Option<ApplicationName> {
-        self.application_registry
-            .get_app_name_for_client_id(client_id)
-    }
-
-    fn insert_client_and_app_name(
-        &self,
-        client_id: ClientId,
-        app_name: ApplicationName,
-    ) -> Result<(), UStatus> {
-        self.application_registry
-            .insert_client_and_app_name(client_id, app_name)
-    }
-
-    fn remove_app_name_for_client_id(&self, client_id: ClientId) -> Option<ApplicationName> {
-        self.application_registry
-            .remove_app_name_for_client_id(client_id)
-    }
-}
-
 impl MessageHandlerRegistry for UPTransportVsomeipStorage {
     fn get_message_handler(
         &self,
-        client_id: ClientId,
         transport_storage: Arc<UPTransportVsomeipStorage>,
         listener_config: (UUri, Option<UUri>, ComparableListener),
     ) -> Result<MessageHandlerFnPtr, GetMessageHandlerError> {
-        self.message_handler_registry.get_message_handler(
-            client_id,
-            transport_storage,
-            listener_config,
-        )
+        self.message_handler_registry
+            .get_message_handler(transport_storage, listener_config)
     }
 
     fn release_message_handler(
         &self,
         listener_config: (UUri, Option<UUri>, ComparableListener),
-    ) -> Result<ClientUsage, UStatus> {
+    ) -> Result<(), UStatus> {
         self.message_handler_registry
             .release_message_handler(listener_config)
     }

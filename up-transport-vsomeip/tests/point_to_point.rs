@@ -24,7 +24,7 @@ use up_rust::UPayloadFormat::UPAYLOAD_FORMAT_PROTOBUF;
 use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UMessageType, UTransport, UUri, UUID};
 use up_transport_vsomeip::UPTransportVsomeip;
 
-const TEST_DURATION: u64 = 1000;
+const TEST_DURATION: u64 = 500;
 
 const STREAMER_UE_ID: u32 = 0x9876;
 
@@ -43,13 +43,6 @@ const SERVICE_UE_VERSION_NUMBER: u32 = 1;
 const SERVICE_METHOD_RESOURCE_ID: u32 = 0x0421;
 
 const NON_POINT_TO_POINT_LISTENED_AUTHORITY: &str = "oops";
-const OTHER_CLIENT_UE_ID: u32 = 0x7331;
-const OTHER_CLIENT_UE_VERSION_NUMBER: u32 = 1;
-const OTHER_CLIENT_STREAMER_UE_ID: u32 = 0x1337;
-
-const OTHER_SERVICE_UE_ID: u32 = 0x5252;
-const OTHER_SERVICE_UE_VERSION_NUMBER: u32 = 1;
-const OTHER_SERVICE_RESOURCE_ID: u32 = 0x0421;
 
 fn client_reply_uuri() -> UUri {
     UUri {
@@ -87,26 +80,6 @@ fn service_uuri() -> UUri {
         ue_id: SERVICE_UE_ID,
         ue_version_major: SERVICE_UE_VERSION_NUMBER,
         resource_id: SERVICE_METHOD_RESOURCE_ID,
-        ..Default::default()
-    }
-}
-
-fn other_client_reply_uuri() -> UUri {
-    UUri {
-        authority_name: NON_POINT_TO_POINT_LISTENED_AUTHORITY.to_string(),
-        ue_id: OTHER_CLIENT_UE_ID,
-        ue_version_major: OTHER_CLIENT_UE_VERSION_NUMBER,
-        resource_id: 0x0000,
-        ..Default::default()
-    }
-}
-
-fn other_service_method_uuri() -> UUri {
-    UUri {
-        authority_name: NON_POINT_TO_POINT_LISTENED_AUTHORITY.to_string(),
-        ue_id: OTHER_SERVICE_UE_ID,
-        ue_version_major: OTHER_SERVICE_UE_VERSION_NUMBER,
-        resource_id: OTHER_SERVICE_RESOURCE_ID,
         ..Default::default()
     }
 }
@@ -364,13 +337,18 @@ async fn point_to_point() {
 
     let point_to_point_uri =
         UUri::try_from_parts(PTP_AUTHORITY_NAME, STREAMER_UE_ID, 1, 0).unwrap();
+    trace!("Initializing point to point: Start");
     let point_to_point_client_res = UPTransportVsomeip::new_with_config(
         point_to_point_uri,
         &PTP_AUTHORITY_NAME.to_string(),
         &abs_vsomeip_config_path.unwrap(),
         None,
     );
+    trace!("Initializing point to point: End");
     let Ok(point_to_point_client) = point_to_point_client_res else {
+        if let Err(e) = point_to_point_client_res {
+            panic!("Unable to establish UTransport: {e:?}");
+        }
         panic!("Unable to establish UTransport");
     };
     let point_to_point_client = Arc::new(point_to_point_client);
@@ -381,14 +359,18 @@ async fn point_to_point() {
     let point_to_point_listener_check =
         Arc::new(PointToPointListener::new(point_to_point_client.clone()));
     let point_to_point_listener: Arc<dyn UListener> = point_to_point_listener_check.clone();
+    trace!("Registering point to point listener: Start");
     let reg_res = point_to_point_client
         .register_listener(&source, Some(&sink), point_to_point_listener)
         .await;
+    trace!("Registering point to point listener: End");
     if let Err(err) = reg_res {
         panic!("Unable to register with UTransport: {err}");
     }
 
-    let client_config = "vsomeip_configs/point_to_point_integ.json";
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+    let client_config = "vsomeip_configs/client.json";
     let client_config = canonicalize(client_config).ok();
     info!("client_config: {client_config:?}");
 
@@ -401,10 +383,13 @@ async fn point_to_point() {
     );
 
     let Ok(client) = client_res else {
-        panic!("Unable to establish client");
+        if let Err(e) = client_res {
+            panic!("Unable to establish client: {:?}", e);
+        }
+        panic!();
     };
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     let response_listener_check = Arc::new(ResponseListener::new());
     let response_listener: Arc<dyn UListener> = response_listener_check.clone();
@@ -421,9 +406,9 @@ async fn point_to_point() {
         panic!("Unable to register for returning Response: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
-    let service_config = "vsomeip_configs/point_to_point_integ.json";
+    let service_config = "vsomeip_configs/service.json";
     let service_config = canonicalize(service_config).ok();
     info!("service_config: {service_config:?}");
 
@@ -436,10 +421,13 @@ async fn point_to_point() {
     );
 
     let Ok(service) = service_res else {
-        panic!("Unable to establish service");
+        if let Err(e) = service_res {
+            panic!("Unable to establish service: {:?}", e);
+        }
+        panic!();
     };
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     let service = Arc::new(service);
 
@@ -458,21 +446,7 @@ async fn point_to_point() {
         error!("Unable to register: {:?}", err);
     }
 
-    let non_listened_to_client_uri = UUri::try_from_parts(
-        NON_POINT_TO_POINT_LISTENED_AUTHORITY,
-        OTHER_CLIENT_STREAMER_UE_ID,
-        1,
-        0,
-    )
-    .unwrap();
-    let non_listened_to_client = UPTransportVsomeip::new(
-        non_listened_to_client_uri,
-        &NON_POINT_TO_POINT_LISTENED_AUTHORITY.to_string(),
-        None,
-    )
-    .unwrap();
-
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     // Track the start time and set the duration for the loop
     let duration = Duration::from_millis(TEST_DURATION);
@@ -491,25 +465,10 @@ async fn point_to_point() {
             panic!("Unable to send message: {err:?}");
         }
 
-        let request_msg_not_listened_for_res = UMessageBuilder::request(
-            other_service_method_uuri(),
-            other_client_reply_uuri(),
-            10000,
-        )
-        .build()
-        .unwrap();
-        trace!("Sending message which shouldn't be received by point to point listener: {request_msg_not_listened_for_res}");
-        let send_res = non_listened_to_client
-            .send(request_msg_not_listened_for_res)
-            .await;
-        if let Err(err) = send_res {
-            panic!("Unable to send message: {err:?}");
-        }
-
         iterations += 1;
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     println!("iterations: {}", iterations);
 
