@@ -158,8 +158,7 @@ where {
                 UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_UMSG_TO_VSOMEIP_MSG,
                 app_request_id, req_id.to_hyphenated_string(),
             );
-
-        rpc_correlation_registry.insert_ue_request_correlation(app_request_id, req_id)?;
+        rpc_correlation_registry.insert_ue_request_correlation(app_request_id, req_id, source)?;
 
         vsomeip_msg
             .get_message_base_pinned()
@@ -284,6 +283,7 @@ pub struct VsomeipMessageToUMessage;
 impl VsomeipMessageToUMessage {
     pub async fn convert_vsomeip_msg_to_umsg(
         authority_name: &AuthorityName,
+        self_uuri: &UUri,
         mechatronics_authority_name: &AuthorityName,
         rpc_correlation_registry: Arc<dyn RpcCorrelationRegistry>,
         vsomeip_message: &mut UniquePtr<MessageWrapper>,
@@ -304,6 +304,7 @@ impl VsomeipMessageToUMessage {
             message_type_e::MT_REQUEST => {
                 Self::convert_vsomeip_mt_request_to_umsg(
                     authority_name,
+                    self_uuri,
                     mechatronics_authority_name,
                     &rpc_correlation_registry,
                     vsomeip_message,
@@ -321,7 +322,6 @@ impl VsomeipMessageToUMessage {
             }
             message_type_e::MT_RESPONSE => {
                 Self::convert_vsomeip_mt_response_to_umsg(
-                    authority_name,
                     mechatronics_authority_name,
                     &rpc_correlation_registry,
                     vsomeip_message,
@@ -331,7 +331,6 @@ impl VsomeipMessageToUMessage {
             }
             message_type_e::MT_ERROR => {
                 Self::convert_vsomeip_mt_error_to_umsg(
-                    authority_name,
                     mechatronics_authority_name,
                     &rpc_correlation_registry,
                     vsomeip_message,
@@ -351,6 +350,7 @@ impl VsomeipMessageToUMessage {
 
     async fn convert_vsomeip_mt_request_to_umsg(
         authority_name: &AuthorityName,
+        self_uuri: &UUri,
         mechatronics_authority_name: &AuthorityName,
         rpc_correlation_registry: &Arc<dyn RpcCorrelationRegistry>,
         vsomeip_message: &mut UniquePtr<MessageWrapper>,
@@ -358,7 +358,6 @@ impl VsomeipMessageToUMessage {
     ) -> Result<UMessage, UStatus> {
         let request_id = vsomeip_message.get_message_base_pinned().get_request();
         let service_id = vsomeip_message.get_message_base_pinned().get_service();
-        let client_id = vsomeip_message.get_message_base_pinned().get_client();
         let method_id = vsomeip_message.get_message_base_pinned().get_method();
         let interface_version = vsomeip_message
             .get_message_base_pinned()
@@ -380,9 +379,9 @@ impl VsomeipMessageToUMessage {
 
         let source = UUri::try_from_parts(
             mechatronics_authority_name,
-            client_id as u32, // TODO: Need to address this by adding instance_id in MSB
-            1,                // TODO: I don't see a way to get this
-            0,                // set to 0 as this is the resource_id of "me"
+            self_uuri.ue_id,
+            self_uuri.ue_version_major.try_into().unwrap(), // we have checked this fits prior
+            0, // set to 0 as this is the resource_id of "intended for me"
         )
         .map_err(|e| {
             UStatus::fail_with_code(
@@ -428,7 +427,6 @@ impl VsomeipMessageToUMessage {
     }
 
     async fn convert_vsomeip_mt_response_to_umsg(
-        authority_name: &AuthorityName,
         mechatronics_authority_name: &AuthorityName,
         rpc_correlation_registry: &Arc<dyn RpcCorrelationRegistry>,
         vsomeip_message: &mut UniquePtr<MessageWrapper>,
@@ -436,25 +434,12 @@ impl VsomeipMessageToUMessage {
     ) -> Result<UMessage, UStatus> {
         let request_id = vsomeip_message.get_message_base_pinned().get_request();
         let service_id = vsomeip_message.get_message_base_pinned().get_service();
-        let client_id = vsomeip_message.get_message_base_pinned().get_client();
         let method_id = vsomeip_message.get_message_base_pinned().get_method();
         let interface_version = vsomeip_message
             .get_message_base_pinned()
             .get_interface_version();
 
         trace!("MT_RESPONSE type");
-        let sink = UUri::try_from_parts(
-            authority_name,
-            client_id as u32, // TODO: Need to address this by adding instance_id in MSB
-            1,                // TODO: I don't see a way to get this
-            0,                // set to 0 as this is the resource_id of "me"
-        )
-        .map_err(|e| {
-            UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                format!("Unable to build sink UUri for MT_RESPONSE type: {e:?}"),
-            )
-        })?;
 
         let source = UUri::try_from_parts(
             mechatronics_authority_name,
@@ -474,7 +459,9 @@ impl VsomeipMessageToUMessage {
             UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
             request_id
         );
-        let req_id = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
+        let (req_id, sink) = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
+
+        trace!("source: {source:?}; sink: {sink:?}");
 
         let umsg_res = UMessageBuilder::response(sink, req_id, source)
             .with_comm_status(UCode::OK)
@@ -494,7 +481,6 @@ impl VsomeipMessageToUMessage {
     }
 
     async fn convert_vsomeip_mt_error_to_umsg(
-        authority_name: &AuthorityName,
         mechatronics_authority_name: &AuthorityName,
         rpc_correlation_registry: &Arc<dyn RpcCorrelationRegistry>,
         vsomeip_message: &mut UniquePtr<MessageWrapper>,
@@ -502,25 +488,12 @@ impl VsomeipMessageToUMessage {
     ) -> Result<UMessage, UStatus> {
         let request_id = vsomeip_message.get_message_base_pinned().get_request();
         let service_id = vsomeip_message.get_message_base_pinned().get_service();
-        let client_id = vsomeip_message.get_message_base_pinned().get_client();
         let method_id = vsomeip_message.get_message_base_pinned().get_method();
         let interface_version = vsomeip_message
             .get_message_base_pinned()
             .get_interface_version();
 
         trace!("MT_ERROR type");
-        let sink = UUri::try_from_parts(
-            authority_name,
-            client_id as u32, // TODO: Need to address this by adding instance_id in MSB
-            1,                // TODO: I don't see a way to get this
-            0,                // set to 0 as this is the resource_id of "me"
-        )
-        .map_err(|e| {
-            UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                format!("Unable to build sink UUri for MT_ERROR type: {e:?}"),
-            )
-        })?;
 
         let source = UUri::try_from_parts(
             mechatronics_authority_name,
@@ -540,10 +513,12 @@ impl VsomeipMessageToUMessage {
             UP_CLIENT_VSOMEIP_FN_TAG_CONVERT_VSOMEIP_MSG_TO_UMSG,
             request_id
         );
-        let req_id = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
+        let (req_id, sink) = rpc_correlation_registry.remove_ue_request_correlation(request_id)?;
         let comm_status = Self::vsomeip_err_code_to_ucode(
             vsomeip_message.get_message_base_pinned().get_return_code(),
         );
+
+        trace!("source: {source:?}; sink: {sink:?}");
 
         let umsg_res = UMessageBuilder::response(sink, req_id, source)
             .with_comm_status(comm_status)

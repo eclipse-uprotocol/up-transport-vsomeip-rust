@@ -124,15 +124,19 @@ impl RpcCorrelationRegistry for UPTransportVsomeipStorage {
         &self,
         someip_request_id: SomeIpRequestId,
         uprotocol_req_id: &UProtocolReqId,
+        source_uri: &UUri,
     ) -> Result<(), UStatus> {
-        self.rpc_correlation
-            .insert_ue_request_correlation(someip_request_id, uprotocol_req_id)
+        self.rpc_correlation.insert_ue_request_correlation(
+            someip_request_id,
+            uprotocol_req_id,
+            source_uri,
+        )
     }
 
     fn remove_ue_request_correlation(
         &self,
         someip_request_id: SomeIpRequestId,
-    ) -> Result<UProtocolReqId, UStatus> {
+    ) -> Result<(UProtocolReqId, UUri), UStatus> {
         self.rpc_correlation
             .remove_ue_request_correlation(someip_request_id)
     }
