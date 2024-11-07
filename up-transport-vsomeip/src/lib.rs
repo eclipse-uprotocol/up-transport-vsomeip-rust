@@ -208,6 +208,17 @@ impl UPTransportVsomeip {
         config_path: Option<&Path>,
         runtime_config: Option<RuntimeConfig>,
     ) -> Result<Self, UStatus> {
+        let check_ue_version_major: Result<u8, _> = uri.ue_version_major.try_into();
+        if check_ue_version_major.is_err() {
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!(
+                    "uri's ue_version_major doesn't fit allotted 8 bits: uri.ue_version_major: {}",
+                    uri.ue_version_major
+                ),
+            ));
+        }
+
         uri.verify_rpc_response().map_err(|e| {
             UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,

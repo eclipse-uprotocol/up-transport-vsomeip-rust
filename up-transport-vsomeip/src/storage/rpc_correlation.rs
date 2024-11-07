@@ -16,11 +16,9 @@ use log::trace;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::RwLock;
-use up_rust::{UCode, UStatus};
+use up_rust::{UCode, UStatus, UUri};
 
-// TODO: Should attach the received Request in full so that when we're shutting down
-//  the transport we can emit messages back to clients noting the error
-type UeRequestCorrelation = HashMap<SomeIpRequestId, UProtocolReqId>;
+type UeRequestCorrelation = HashMap<SomeIpRequestId, (UProtocolReqId, UUri)>;
 type MeRequestCorrelation = HashMap<UProtocolReqId, SomeIpRequestId>;
 type ClientIdSessionIdTracking = HashMap<ClientId, SessionId>;
 
@@ -34,13 +32,14 @@ pub trait RpcCorrelationRegistry: Send + Sync {
         &self,
         someip_request_id: SomeIpRequestId,
         uprotocol_req_id: &UProtocolReqId,
+        source_uri: &UUri,
     ) -> Result<(), UStatus>;
 
     /// Remove a uE [UProtocolReqId] based on an mE [SomeIpRequestId] for correlation
     fn remove_ue_request_correlation(
         &self,
         someip_request_id: SomeIpRequestId,
-    ) -> Result<UProtocolReqId, UStatus>;
+    ) -> Result<(UProtocolReqId, UUri), UStatus>;
 
     /// Insert a uE [UProtocolReqId] and mE [SomeIpRequestId] for later correlation
     fn insert_me_request_correlation(
@@ -88,6 +87,7 @@ impl InMemoryRpcCorrelationRegistry {
         &self,
         someip_request_id: SomeIpRequestId,
         uprotocol_req_id: &UProtocolReqId,
+        source_uri: &UUri,
     ) -> Result<(), UStatus> {
         let mut ue_request_correlation = self.ue_request_correlation.write().unwrap();
         match ue_request_correlation.entry(someip_request_id) {
@@ -101,7 +101,7 @@ impl InMemoryRpcCorrelationRegistry {
                 trace!("(app_request_id, req_id)  inserted for later correlation in UE_REQUEST_CORRELATION: ({}, {})",
                     someip_request_id, uprotocol_req_id.to_hyphenated_string(),
                 );
-                vac.insert(uprotocol_req_id.clone());
+                vac.insert((uprotocol_req_id.clone(), source_uri.clone()));
                 Ok(())
             }
         }
@@ -111,10 +111,12 @@ impl InMemoryRpcCorrelationRegistry {
     pub fn remove_ue_request_correlation(
         &self,
         someip_request_id: SomeIpRequestId,
-    ) -> Result<UProtocolReqId, UStatus> {
+    ) -> Result<(UProtocolReqId, UUri), UStatus> {
         let mut ue_request_correlation = self.ue_request_correlation.write().unwrap();
 
-        let Some(uprotocol_req_id) = ue_request_correlation.remove(&someip_request_id) else {
+        let Some((uprotocol_req_id, source_uri)) =
+            ue_request_correlation.remove(&someip_request_id)
+        else {
             return Err(UStatus::fail_with_code(
                 UCode::NOT_FOUND,
                 format!(
@@ -124,7 +126,7 @@ impl InMemoryRpcCorrelationRegistry {
             ));
         };
 
-        Ok(uprotocol_req_id)
+        Ok((uprotocol_req_id, source_uri))
     }
 
     /// Insert a uE [UProtocolReqId] and mE [SomeIpRequestId] for later correlation

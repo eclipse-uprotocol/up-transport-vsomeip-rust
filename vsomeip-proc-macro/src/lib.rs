@@ -103,8 +103,10 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
                     let remote_authority_name = transport_storage.get_remote_authority();
 
                     let transport_storage_clone = transport_storage.clone();
+                    let uri = transport_storage.get_uri();
                     let res = VsomeipMessageToUMessage::convert_vsomeip_msg_to_umsg(
                         &authority_name,
+                        &uri,
                         &remote_authority_name,
                         transport_storage_clone,
                         &mut vsomeip_msg_wrapper,
