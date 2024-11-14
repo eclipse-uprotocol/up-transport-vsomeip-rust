@@ -20,6 +20,7 @@ use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, 
 use up_transport_vsomeip::{UPTransportVsomeip, VsomeipApplicationConfig};
 
 const TEST_DURATION: u64 = 1000;
+const MAX_ITERATIONS: usize = 100;
 
 pub struct SubscriberListener {
     received_publish: AtomicUsize,
@@ -118,9 +119,10 @@ async fn publisher_subscriber() {
     // Track the start time and set the duration for the loop
     let duration = Duration::from_millis(TEST_DURATION);
     let start_time = Instant::now();
-
     let mut iterations = 0;
-    while Instant::now().duration_since(start_time) < duration {
+
+    // limit with iterations to ensure socket transactions can complete during test
+    while (Instant::now().duration_since(start_time) < duration) && (iterations < MAX_ITERATIONS) {
         let publish_payload_string = format!("publish_message@i={iterations}");
         let publish_payload = publish_payload_string.into_bytes();
 

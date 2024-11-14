@@ -19,9 +19,6 @@ env:
   VSOMEIP_SOURCE_PATH: vsomeip-src
   VSOMEIP_INSTALL_PATH: vsomeip-install
 
-  GENERIC_CPP_STDLIB_PATH: /usr/include/c++/11
-  ARCH_SPECIFIC_CPP_STDLIB_PATH: /usr/include/x86_64-linux-gnu/c++/11
-
 on:
   push:
     branches: [ main ]
@@ -31,6 +28,7 @@ on:
       - "**/include/**"
       - "**/src/**"
       - "**/Cargo.*"
+      - "build/**"
   workflow_call:
   workflow_dispatch:
 
@@ -39,10 +37,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  set-env:
+    name: Set environment variables
+    runs-on: ubuntu-22.04
+
+    outputs:
+      arch_specific_cpp_stdlib_path: ${{ steps.set_env.outputs.arch_specific_cpp_stdlib_path }}
+      generic_cpp_stdlib_path: ${{ steps.set_env.outputs.generic_cpp_stdlib_path }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add execute permissions for envsetup
+        run: chmod +x build/envsetup.sh
+
+      - name: Set stdlib paths dynamically
+        id: set_env
+        run: |
+          source ./build/envsetup.sh highest
+          echo "arch_specific_cpp_stdlib_path=$ARCH_SPECIFIC_CPP_STDLIB_PATH" >> $GITHUB_OUTPUT
+          echo "generic_cpp_stdlib_path=$GENERIC_CPP_STDLIB_PATH" >> $GITHUB_OUTPUT
+
   obtain_and_build_vsomeip:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    needs: set-env
+
     outputs:
       cache_key: ${{ steps.generate_cache_key.outputs.CACHE_KEY }}
+
+    env:
+       ARCH_SPECIFIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.arch_specific_cpp_stdlib_path }}
+       GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -53,6 +80,7 @@ jobs:
           echo "VSOMEIP_SOURCE_PATH=${{ github.workspace }}/${{ env.VSOMEIP_SOURCE_PATH }}" >> $GITHUB_ENV
           echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
           echo "VSOMEIP_SOURCE_PATH_WITH_WILDCARD=${{ github.workspace }}/${{ env.VSOMEIP_SOURCE_PATH }}/*" >> $GITHUB_ENV
+          env
 
       - name: Print environment variables for debugging
         run: |
@@ -60,7 +88,10 @@ jobs:
           echo "VSOMEIP_SOURCE_PATH: ${{ env.VSOMEIP_SOURCE_PATH }}"
           echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
           echo "VSOMEIP_SOURCE_PATH_WITH_WILDCARD: ${{ env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD }}"
-
+          echo "GENERIC_CPP_STDLIB_PATH: ${{ env.GENERIC_CPP_STDLIB_PATH }}"
+          echo "ARCH_SPECIFIC_CPP_STDLIB_PATH: ${{ env.ARCH_SPECIFIC_CPP_STDLIB_PATH }}"
+          env
+          
       - name: Download tarball
         run: |
           wget -O vsomeip-source.tar.gz $VSOMEIP_SOURCE_TARBALL
@@ -102,7 +133,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-vsomeip.outputs.cache-hit != 'true'
-        run: sudo apt-get install -y build-essential cmake libboost-all-dev
+        run: sudo apt-get install -y build-essential cmake libboost-all-dev doxygen asciidoc 
 
       - name: Build vsomeip
         if: steps.cache-vsomeip.outputs.cache-hit != 'true'
@@ -120,9 +151,14 @@ jobs:
 
   lint:
     name: Lint
-    needs: obtain_and_build_vsomeip
-    runs-on: ubuntu-latest
+    needs: 
+      - obtain_and_build_vsomeip
+      - set-env
+    runs-on: ubuntu-22.04
+
     env:
+      ARCH_SPECIFIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.arch_specific_cpp_stdlib_path }}
+      GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
       CACHE_KEY: ${{ needs.obtain_and_build_vsomeip.outputs.cache_key }}
 
     steps:
@@ -170,10 +206,15 @@ jobs:
 
   test:
     name: Test
-    needs: obtain_and_build_vsomeip
-    runs-on: ubuntu-latest
+    needs: 
+      - obtain_and_build_vsomeip
+      - set-env
+    runs-on: ubuntu-22.04
+
     env:
       CACHE_KEY: ${{ needs.obtain_and_build_vsomeip.outputs.cache_key }}
+      ARCH_SPECIFIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.arch_specific_cpp_stdlib_path }}
+      GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
 
     steps:
       - uses: actions/checkout@v4
@@ -221,7 +262,9 @@ jobs:
       - name: Run tests and report code coverage
         run: |
           # enable nightly features so that we can also include Doctests
-          LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${VSOMEIP_INSTALL_PATH}/lib RUSTC_BOOTSTRAP=1 cargo tarpaulin --no-default-features -o xml -o lcov -o html --doc --tests -- --test-threads 1 
+          # TODO: tarpaulin fails silently. Possible version issue
+          # LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${VSOMEIP_INSTALL_PATH}/lib RUSTC_BOOTSTRAP=1 cargo tarpaulin --no-default-features -o xml -o lcov -o html --doc --tests -- --test-threads 1 
+          LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${VSOMEIP_INSTALL_PATH}/lib cargo test -- --test-threads 1
 
       - name: Upload coverage report (xml)
         uses: actions/upload-artifact@v4
@@ -249,10 +292,14 @@ jobs:
 
   build-docs:
     name: Build documentation
-    needs: obtain_and_build_vsomeip
-    runs-on: ubuntu-latest
+    needs: 
+      - obtain_and_build_vsomeip
+      - set-env
+    runs-on: ubuntu-22.04
     env:
       CACHE_KEY: ${{ needs.obtain_and_build_vsomeip.outputs.cache_key }}
+      ARCH_SPECIFIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.arch_specific_cpp_stdlib_path }}
+      GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
 
     steps:
       - uses: actions/checkout@v4
