@@ -21,6 +21,7 @@ use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTran
 use up_transport_vsomeip::UPTransportVsomeip;
 
 const TEST_DURATION: u64 = 1000;
+const MAX_ITERATIONS: usize = 100;
 
 pub struct ResponseListener {
     received_response: AtomicUsize,
@@ -246,7 +247,7 @@ async fn client_service() {
     // let iterations_to_run = 1;
     let mut i = 20;
     // while iterations < iterations_to_run {
-    while Instant::now().duration_since(start_time) < duration {
+    while (Instant::now().duration_since(start_time) < duration) && (iterations < MAX_ITERATIONS) {
         let payload_string = format!("request@i={i}");
         let payload = payload_string.into_bytes();
         let request_msg_res_1_a =

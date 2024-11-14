@@ -25,7 +25,7 @@ use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UMessageType, UTransp
 use up_transport_vsomeip::UPTransportVsomeip;
 
 const TEST_DURATION: u64 = 500;
-
+const MAX_ITERATIONS: usize = 100;
 const STREAMER_UE_ID: u32 = 0x9876;
 
 const CLIENT_AUTHORITY_NAME: &str = "foo";
@@ -453,7 +453,7 @@ async fn point_to_point() {
     let start_time = Instant::now();
 
     let mut iterations = 0;
-    while Instant::now().duration_since(start_time) < duration {
+    while (Instant::now().duration_since(start_time) < duration) && (iterations < MAX_ITERATIONS) {
         let request_msg_res =
             UMessageBuilder::request(ptp_method_uuri(), client_reply_uuri(), 10000)
                 .build()
