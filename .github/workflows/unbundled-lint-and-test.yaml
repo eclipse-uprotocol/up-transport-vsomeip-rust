@@ -19,9 +19,6 @@ env:
   VSOMEIP_SOURCE_PATH: vsomeip-src
   VSOMEIP_INSTALL_PATH: vsomeip-install
 
-  GENERIC_CPP_STDLIB_PATH: /usr/include/c++/11
-  ARCH_SPECIFIC_CPP_STDLIB_PATH: /usr/include/x86_64-linux-gnu/c++/11
-
 on:
   push:
     branches: [ main ]
@@ -31,6 +28,7 @@ on:
       - "**/include/**"
       - "**/src/**"
       - "**/Cargo.*"
+      - "build/**"
   workflow_call:
   workflow_dispatch:
 
@@ -47,12 +45,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Add execute permissions for envsetup
+        run: chmod +x build/envsetup.sh
+
       - name: Set environment variables
         run: |
           echo "VSOMEIP_SOURCE_TARBALL=${{ env.VSOMEIP_RELEASE_URL }}${{ env.VSOMEIP_RELEASE_TAG }}" >> $GITHUB_ENV
           echo "VSOMEIP_SOURCE_PATH=${{ github.workspace }}/${{ env.VSOMEIP_SOURCE_PATH }}" >> $GITHUB_ENV
           echo "VSOMEIP_INSTALL_PATH=${{ github.workspace }}/${{ env.VSOMEIP_INSTALL_PATH }}" >> $GITHUB_ENV
           echo "VSOMEIP_SOURCE_PATH_WITH_WILDCARD=${{ github.workspace }}/${{ env.VSOMEIP_SOURCE_PATH }}/*" >> $GITHUB_ENV
+          source ./build/envsetup.sh highest
+          echo "GENERIC_CPP_STDLIB_PATH=$GENERIC_CPP_STDLIB_PATH" >> $GITHUB_ENV
+          echo "ARCH_SPECIFIC_CPP_STDLIB_PATH=$ARCH_SPECIFIC_CPP_STDLIB_PATH" >> $GITHUB_ENV
+          env
 
       - name: Print environment variables for debugging
         run: |
@@ -60,7 +65,10 @@ jobs:
           echo "VSOMEIP_SOURCE_PATH: ${{ env.VSOMEIP_SOURCE_PATH }}"
           echo "VSOMEIP_INSTALL_PATH: ${{ env.VSOMEIP_INSTALL_PATH }}"
           echo "VSOMEIP_SOURCE_PATH_WITH_WILDCARD: ${{ env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD }}"
-
+          echo "GENERIC_CPP_STDLIB_PATH: ${{ env.GENERIC_CPP_STDLIB_PATH }}"
+          echo "ARCH_SPECIFIC_CPP_STDLIB_PATH: ${{ env.ARCH_SPECIFIC_CPP_STDLIB_PATH }}"
+          env
+          
       - name: Download tarball
         run: |
           wget -O vsomeip-source.tar.gz $VSOMEIP_SOURCE_TARBALL

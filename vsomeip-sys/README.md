@@ -13,18 +13,16 @@ We currently support vsomeip **3.4.10** as released [here](https://github.com/CO
 1. Ensure you have a Rust toolchain installed
 2. Ensure you have the vsomeip library installed (optional, see features in `Cargo.toml`)
 3. Ensure that you have the [requirements](https://github.com/COVESA/vsomeip?tab=readme-ov-file#build-instructions-for-linux) of the vsomeip project install
+4. Run env_setup.sh in parent directory
+
+``` bash
+source ../build/env_setup.sh
+```
 
 Then,
 
 ```bash
-VSOMEIP_INSTALL_PATH=<path/to/where/to/install/vsomeip> GENERIC_CPP_STDLIB_PATH=<path/to/generic/cpp/stdlib> ARCH_SPECIFIC_CPP_STDLIB_PATH=<path/to/arch_specific/cpp/stdlib> cargo build
-```
-
-If you are running a Linux-based OS on x86_64, it's possible these look like:
-
-```
-GENERIC_CPP_STDLIB_PATH=/usr/include/c++/11
-ARCH_SPECIFIC_CPP_STDLIB_PATH=/usr/include/x86_64-linux-gnu/c++/11
+VSOMEIP_INSTALL_PATH=<path/to/where/to/install/vsomeip> cargo build
 ```
 
 ## Running a binary built with vsomeip-sys
@@ -61,7 +59,7 @@ The `VSOMEIP_INSTALL_PATH` then becomes _required_ and must point to the install
 
 You may do the following (note `--no-default-features`):
 ```bash
-VSOMEIP_INSTALL_PATH=<path/to/where/to/install/vsomeip> GENERIC_CPP_STDLIB_PATH=<path/to/generic/cpp/stdlib> ARCH_SPECIFIC_CPP_STDLIB_PATH=<path/to/arch_specific/cpp/stdlib> cargo build --no-default-features
+VSOMEIP_INSTALL_PATH=<path/to/where/to/install/vsomeip> cargo build --no-default-features
 ```
 
 ## My build and deployment environments differ
