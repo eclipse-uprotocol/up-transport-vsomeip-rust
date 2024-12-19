@@ -73,7 +73,7 @@ fn read_json_file(file_path: &Path) -> Result<Value, serde_json::Error> {
 pub(crate) fn extract_application(file_path: &Path) -> Result<VsomeipApplicationConfig, UStatus> {
     let file_content = read_json_file(file_path);
 
-    return match file_content {
+    match file_content {
         Ok(json_data) => {
             if let Some(applications_value) =
                 json_data.get("applications").and_then(|v| v.as_array())
@@ -103,13 +103,13 @@ pub(crate) fn extract_application(file_path: &Path) -> Result<VsomeipApplication
             let err_msg = format!("Error reading JSON file: {:?}", e);
             Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, err_msg))
         }
-    };
+    }
 }
 
 pub(crate) fn extract_services(file_path: &Path) -> Result<Vec<ServiceConfig>, UStatus> {
     let file_content = read_json_file(file_path);
 
-    return match file_content {
+    match file_content {
         Ok(json_data) => {
             if let Some(services_value) = json_data.get("services").and_then(|v| v.as_array()) {
                 match serde_json::from_value::<Vec<ServiceConfig>>(Value::from(
@@ -130,7 +130,7 @@ pub(crate) fn extract_services(file_path: &Path) -> Result<Vec<ServiceConfig>, U
             let err_msg = format!("Error reading JSON file: {:?}", e);
             Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, err_msg))
         }
-    };
+    }
 }
 
 // TODO: Add unit tests
