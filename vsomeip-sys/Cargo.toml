@@ -13,8 +13,15 @@
 
 [package]
 name = "vsomeip-sys"
-version.workspace = true
+documentation.workspace = true
 edition.workspace = true
+exclude.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+readme = "../README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

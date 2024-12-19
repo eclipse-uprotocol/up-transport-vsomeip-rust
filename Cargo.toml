@@ -15,6 +15,7 @@
 resolver = "2"
 members = [
     "up-transport-vsomeip",
+    "vsomeip-proc-macro",
     "vsomeip-sys",
 ]
 
