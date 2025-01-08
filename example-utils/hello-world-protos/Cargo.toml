@@ -11,8 +11,16 @@
 
 [package]
 name = "hello-world-protos"
-version = "0.1.0"
-edition = "2021"
+description = "Useful protos to be used when doing tests"
+documentation.workspace = true
+edition.workspace = true
+exclude.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

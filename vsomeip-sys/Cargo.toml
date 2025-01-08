@@ -13,6 +13,7 @@
 
 [package]
 name = "vsomeip-sys"
+description = "Somewhat low level unsafe wrapper around vsomeip"
 documentation.workspace = true
 edition.workspace = true
 exclude.workspace = true

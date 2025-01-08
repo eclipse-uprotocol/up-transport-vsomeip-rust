@@ -107,28 +107,37 @@ mod build {
             .expect("CARGO_MANIFEST_DIR environment variable is not set");
 
         let patch_folder = PathBuf::from(&crate_root).join("patches");
+        println!("debug: patch_folder: {}", patch_folder.display());
 
         let submodule_git = PathBuf::from(&crate_root).join(format!("{}/.git", submodule_folder));
         println!("debug: submodule_git: {:?}", submodule_git);
 
         // Make sure that the Git submodule is checked out
         if !Path::new(&submodule_git).exists() {
-            let _ = Command::new("git")
+            let submodule_checkout = Command::new("git")
                 .arg("-C")
                 .arg(submodule_folder)
                 .arg("submodule")
                 .arg("update")
                 .arg("--init")
                 .status();
+
+            println!("debug: submodule_checkout: {:?}", submodule_checkout);
         }
 
-        println!("debug: trying to apply patch");
+        let submodule_to_patch = PathBuf::from(&crate_root).join(format!("{}", submodule_folder));
+        println!(
+            "debug: trying to apply patch to: {}",
+            submodule_to_patch.display()
+        );
         let disable_test_patch = patch_folder.join("disable_tests.patch");
         let disable_test_patch_str = format!("{}", disable_test_patch.display());
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(submodule_folder)
-            .arg("apply")
+        println!("disable_test_patch_str: {}", disable_test_patch_str);
+        let output = Command::new("patch")
+            .arg("-d")
+            .arg(&submodule_to_patch)
+            .arg("-p1")
+            .arg("-i")
             .arg(disable_test_patch_str)
             .output()
             .expect("Failed to apply patch");
@@ -171,11 +180,11 @@ mod build {
             .arg("stash")
             .output()
             .expect("Failed to stash changes");
-        println!("debug: stash output: {:?}", stash_output);
+        println!("debug: stash changes output: {:?}", stash_output);
 
         if !stash_output.status.success() {
-            panic!(
-                "Failed to stash changes: {}",
+            println!(
+                "Failed to stash changes, maybe you're running a publish: {}",
                 String::from_utf8_lossy(&stash_output.stderr)
             );
         }
@@ -189,11 +198,11 @@ mod build {
             .arg("stash@{0}")
             .output()
             .expect("Failed to stash changes");
-        println!("debug: stash output: {:?}", stash_output);
+        println!("debug: remove stash output: {:?}", stash_output);
 
         if !stash_output.status.success() {
-            panic!(
-                "Failed to stash changes: {}",
+            println!(
+                "Failed to stash changes, maybe you're running a publish: {}",
                 String::from_utf8_lossy(&stash_output.stderr)
             );
         }

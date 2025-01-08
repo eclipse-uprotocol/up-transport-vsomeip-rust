@@ -35,7 +35,7 @@ license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-transport-vsomeip-rust"
 rust-version = "1.76"
-version = "0.3.0"
+version = "0.4.0"
 
 [workspace.dependencies]
 async-trait = { version = "0.1" }
@@ -51,9 +51,7 @@ regex = { version = "1.10" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 tokio = { version = "1.35.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "tracing"] }
-up-rust = { version = "0.2.0" }
-vsomeip-proc-macro = { path = "vsomeip-proc-macro" }
-vsomeip-sys = { path = "vsomeip-sys", default-features = false }
+up-rust = { version = "0.3.0" }
+vsomeip-proc-macro = { version = "0.4.0", path = "vsomeip-proc-macro" }
+vsomeip-sys = { version = "0.4.0", path = "vsomeip-sys", default-features = false }
 
-[workspace.dev-dependencies]
-test-case = { version = "3.3" }
