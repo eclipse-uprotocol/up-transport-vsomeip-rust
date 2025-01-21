@@ -14,7 +14,6 @@
 [package]
 name = "vsomeip-proc-macro"
 description = "Useful proc macros for generating necessary extern 'C' fns for use with vsomeip."
-description = "Useful proc macros for interfacing with vsomeip"
 documentation.workspace = true
 edition.workspace = true
 exclude.workspace = true
