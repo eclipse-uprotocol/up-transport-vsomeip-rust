@@ -34,14 +34,16 @@ pub fn determine_type(
         trace!("source_filter: {source_filter:?}");
         trace!("sink_filter: {sink_filter:?}");
         let streamer_use_case = {
-            source_filter.authority_name == "*"
-                && source_filter.ue_id == 0x0000_FFFF
-                && source_filter.ue_version_major == 0xFF
-                && source_filter.resource_id == 0xFFFF
-                && sink_filter.authority_name != "*"
-                && sink_filter.ue_id == 0x0000_FFFF
-                && sink_filter.ue_version_major == 0xFF
-                && sink_filter.resource_id == 0xFFFF
+            source_filter.has_wildcard_authority()
+                && source_filter.has_wildcard_entity_type()
+                && source_filter.has_wildcard_entity_instance()
+                && source_filter.has_wildcard_version()
+                && source_filter.has_wildcard_resource_id()
+                && !sink_filter.has_wildcard_authority()
+                && sink_filter.has_wildcard_entity_type()
+                && sink_filter.has_wildcard_entity_instance()
+                && sink_filter.has_wildcard_version()
+                && sink_filter.has_wildcard_resource_id()
         };
 
         if streamer_use_case {
