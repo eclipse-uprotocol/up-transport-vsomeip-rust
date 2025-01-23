@@ -35,7 +35,7 @@ license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-transport-vsomeip-rust"
 rust-version = "1.76"
-version = "0.4.0"
+version = "0.4.1"
 
 [workspace.dependencies]
 async-trait = { version = "0.1" }
