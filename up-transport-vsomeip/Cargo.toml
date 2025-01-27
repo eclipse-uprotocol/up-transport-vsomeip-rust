@@ -13,9 +13,9 @@
 
 [package]
 name = "up-transport-vsomeip"
+description = "Layer-1 uTransport implementation for vsomeip (SOME/IP)"
 documentation.workspace = true
 edition.workspace = true
-exclude.workspace = true
 keywords.workspace = true
 license.workspace = true
 repository.workspace = true

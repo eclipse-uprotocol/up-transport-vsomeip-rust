@@ -15,6 +15,11 @@ use std::env;
 use std::path::PathBuf;
 
 #[cfg(feature = "bundled")]
+use std::path::Path;
+#[cfg(feature = "bundled")]
+use std::{fs, io};
+
+#[cfg(feature = "bundled")]
 fn vsomeip_includes() -> PathBuf {
     let crate_root =
         env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable is not set");
@@ -100,6 +105,8 @@ mod build {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
+    use crate::copy_dir_all;
+
     pub fn build() {
         let submodule_folder = "vsomeip";
 
@@ -107,28 +114,45 @@ mod build {
             .expect("CARGO_MANIFEST_DIR environment variable is not set");
 
         let patch_folder = PathBuf::from(&crate_root).join("patches");
+        println!("debug: patch_folder: {}", patch_folder.display());
 
         let submodule_git = PathBuf::from(&crate_root).join(format!("{}/.git", submodule_folder));
         println!("debug: submodule_git: {:?}", submodule_git);
 
         // Make sure that the Git submodule is checked out
         if !Path::new(&submodule_git).exists() {
-            let _ = Command::new("git")
+            let submodule_checkout = Command::new("git")
                 .arg("-C")
                 .arg(submodule_folder)
                 .arg("submodule")
                 .arg("update")
                 .arg("--init")
                 .status();
+
+            println!("debug: submodule_checkout: {:?}", submodule_checkout);
         }
 
-        println!("debug: trying to apply patch");
+        let out_dir = env::var_os("OUT_DIR").unwrap();
+        let submodule_to_patch = PathBuf::from(&crate_root).join(submodule_folder);
+        let vsomeip_build_dir = PathBuf::from(out_dir).join("vsomeip").join("vsomeip_build");
+        let copy_res = copy_dir_all(&submodule_to_patch, &vsomeip_build_dir);
+        println!(
+            "debug: copying vsomeip to output directory to build: {:?}",
+            copy_res
+        );
+
+        println!(
+            "debug: trying to apply patch to: {}",
+            vsomeip_build_dir.display()
+        );
         let disable_test_patch = patch_folder.join("disable_tests.patch");
         let disable_test_patch_str = format!("{}", disable_test_patch.display());
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(submodule_folder)
-            .arg("apply")
+        println!("disable_test_patch_str: {}", disable_test_patch_str);
+        let output = Command::new("patch")
+            .arg("-d")
+            .arg(&vsomeip_build_dir)
+            .arg("-p1")
+            .arg("-i")
             .arg(disable_test_patch_str)
             .output()
             .expect("Failed to apply patch");
@@ -145,15 +169,14 @@ mod build {
         let vsomeip_install_path =
             env::var("VSOMEIP_INSTALL_PATH").unwrap_or(vsomeip_install_path_default);
 
-        let vsomeip_project_root = PathBuf::from(&crate_root).join("vsomeip");
         println!("debug: vsomeip_project_root set");
         println!(
             "debug: vsomeip_project_root: {}",
-            vsomeip_project_root.display()
+            vsomeip_build_dir.display()
         );
         println!("debug: vsomeip_install_path: {}", vsomeip_install_path);
 
-        let vsomeip_cmake_build = Config::new(vsomeip_project_root)
+        let vsomeip_cmake_build = Config::new(vsomeip_build_dir)
             .define("CMAKE_INSTALL_PREFIX", vsomeip_install_path.clone())
             .define("ENABLE_SIGNAL_HANDLING", "1")
             .build_target("install")
@@ -163,40 +186,6 @@ mod build {
             "debug: vsomeip_cmake_build: {}",
             vsomeip_cmake_build.display()
         );
-
-        // Remove the changes made
-        let stash_output = Command::new("git")
-            .arg("-C")
-            .arg(submodule_folder)
-            .arg("stash")
-            .output()
-            .expect("Failed to stash changes");
-        println!("debug: stash output: {:?}", stash_output);
-
-        if !stash_output.status.success() {
-            panic!(
-                "Failed to stash changes: {}",
-                String::from_utf8_lossy(&stash_output.stderr)
-            );
-        }
-
-        // Remove the stash entry
-        let stash_output = Command::new("git")
-            .arg("-C")
-            .arg(submodule_folder)
-            .arg("stash")
-            .arg("drop")
-            .arg("stash@{0}")
-            .output()
-            .expect("Failed to stash changes");
-        println!("debug: stash output: {:?}", stash_output);
-
-        if !stash_output.status.success() {
-            panic!(
-                "Failed to stash changes: {}",
-                String::from_utf8_lossy(&stash_output.stderr)
-            );
-        }
     }
 }
 mod bindings {
@@ -346,4 +335,19 @@ mod bindings {
         );
         fixed_line
     }
+}
+
+#[cfg(feature = "bundled")]
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
