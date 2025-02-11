@@ -158,12 +158,20 @@ mod tests {
 
     #[test]
     fn test_deserialize_hex_u16() {
-        let data = "\"0x1A3F\"";
-        let deserialized: Result<u16, _> = serde_json::from_str(data);
+        // Test struct to use our custom deserializer
+        #[derive(Deserialize)]
+        struct TestHex {
+            #[serde(deserialize_with = "deserialize_hex_u16")]
+            value: u16,
+        }
+
+        let json = r#"{"value": "0x1A3F"}"#;
+        let deserialized: Result<TestHex, _> = serde_json::from_str(json);
         assert!(
-            deserialized.is_err(),
-            "Expected an error due to string type"
+            deserialized.is_ok(),
+            "Failed to deserialize valid hex string"
         );
+        assert_eq!(deserialized.unwrap().value, 0x1A3F);
     }
 
     #[test]
