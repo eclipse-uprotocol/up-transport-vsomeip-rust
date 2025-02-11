@@ -19,7 +19,7 @@ use tokio::time::Instant;
 use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 use up_transport_vsomeip::{UPTransportVsomeip, VsomeipApplicationConfig};
 
-const TEST_DURATION: u64 = 1000;
+const TEST_DURATION: u64 = 2000;
 const MAX_ITERATIONS: usize = 100;
 
 pub struct SubscriberListener {
@@ -85,7 +85,7 @@ async fn publisher_subscriber() {
         panic!("Unable to establish subscriber");
     };
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let subscriber_listener_check = Arc::new(SubscriberListener::new());
     let subscriber_listener: Arc<dyn UListener> = subscriber_listener_check.clone();
@@ -98,7 +98,7 @@ async fn publisher_subscriber() {
         panic!("Unable to register: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let vsomeip_application_config_publisher =
         VsomeipApplicationConfig::new("publisher_app", 0x343);
@@ -114,7 +114,7 @@ async fn publisher_subscriber() {
         panic!("Unable to establish publisher");
     };
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Track the start time and set the duration for the loop
     let duration = Duration::from_millis(TEST_DURATION);
@@ -144,10 +144,12 @@ async fn publisher_subscriber() {
             panic!("Unable to send Publish UMessage: {:?}", err);
         }
 
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
         iterations += 1;
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     println!("iterations: {}", iterations);
 
