@@ -20,7 +20,7 @@ use tokio::time::Instant;
 use up_rust::{UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
 
-const TEST_DURATION: u64 = 1000;
+const TEST_DURATION: u64 = 2000;
 const MAX_ITERATIONS: usize = 100;
 
 pub struct ResponseListener {
@@ -160,7 +160,7 @@ async fn client_service() {
         );
     };
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let client_uuri = UUri::try_from_parts(
         client_authority_name,
@@ -192,7 +192,7 @@ async fn client_service() {
         panic!("Unable to register for returning Response: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let service_config = "vsomeip_configs/service.json";
     let service_config = canonicalize(service_config).ok();
@@ -210,7 +210,7 @@ async fn client_service() {
         panic!("Unable to establish subscriber");
     };
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let service = Arc::new(service);
 
@@ -237,7 +237,7 @@ async fn client_service() {
         error!("Unable to register: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Track the start time and set the duration for the loop
     let duration = Duration::from_millis(TEST_DURATION);

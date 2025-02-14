@@ -55,6 +55,17 @@ impl UListener for SubscriberListener {
     }
 }
 
+pub async fn spawn_artifical_load(duration: Duration) {
+    let start = Instant::now();
+    while Instant::now().duration_since(start) < duration {
+        let mut dummy = 0u64;
+        for i in 0..500_000 {
+            dummy = dummy.wrapping_add(i);
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn publisher_subscriber() {
     env_logger::init();
@@ -85,7 +96,7 @@ async fn publisher_subscriber() {
         panic!("Unable to establish subscriber");
     };
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let subscriber_listener_check = Arc::new(SubscriberListener::new());
     let subscriber_listener: Arc<dyn UListener> = subscriber_listener_check.clone();
@@ -98,7 +109,7 @@ async fn publisher_subscriber() {
         panic!("Unable to register: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let vsomeip_application_config_publisher =
         VsomeipApplicationConfig::new("publisher_app", 0x343);
@@ -114,7 +125,11 @@ async fn publisher_subscriber() {
         panic!("Unable to establish publisher");
     };
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    let load_handle = tokio::spawn(async {
+        spawn_artifical_load(Duration::from_secs(2)).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Track the start time and set the duration for the loop
     let duration = Duration::from_millis(TEST_DURATION);
@@ -148,15 +163,26 @@ async fn publisher_subscriber() {
 
         iterations += 1;
     }
-
-    tokio::time::sleep(Duration::from_millis(2000)).await;
-
     println!("iterations: {}", iterations);
+
+    //tokio::time::sleep(Duration::from_millis(500)).await;
+    let mut attempts = 0;
+    const MAX_WAIT_ATTEMPS: usize = 0;
+    while subscriber_listener_check.received_publish() < iterations && attempts < MAX_WAIT_ATTEMPS {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        attempts += 1;
+    }
 
     println!(
         "subscriber_listener_check.received_publish(): {}",
         subscriber_listener_check.received_publish()
     );
 
-    assert_eq!(iterations, subscriber_listener_check.received_publish());
+    let _ = load_handle.await;
+
+    assert_eq!(
+        iterations,
+        subscriber_listener_check.received_publish(),
+        "The number of messages received by the subscriber does not match the number sent."
+    );
 }
