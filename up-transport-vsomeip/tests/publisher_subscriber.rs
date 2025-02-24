@@ -136,6 +136,7 @@ async fn publisher_subscriber() {
     let start_time = Instant::now();
     let mut iterations = 0;
 
+    
     // limit with iterations to ensure socket transactions can complete during test
     while (Instant::now().duration_since(start_time) < duration) && (iterations < MAX_ITERATIONS) {
         let publish_payload_string = format!("publish_message@i={iterations}");
@@ -165,10 +166,9 @@ async fn publisher_subscriber() {
     }
     println!("iterations: {}", iterations);
 
-    //tokio::time::sleep(Duration::from_millis(500)).await;
     let mut attempts = 0;
-    const MAX_WAIT_ATTEMPS: usize = 0;
-    while subscriber_listener_check.received_publish() < iterations && attempts < MAX_WAIT_ATTEMPS {
+    const MAX_WAIT_ATTEMPTS: usize = 10;
+    while subscriber_listener_check.received_publish() < iterations && attempts < MAX_WAIT_ATTEMPTS {
         tokio::time::sleep(Duration::from_millis(200)).await;
         attempts += 1;
     }

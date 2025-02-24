@@ -36,6 +36,9 @@ pub struct VsomeipApplicationConfig {
 
 impl VsomeipApplicationConfig {
     pub fn new(name: &str, id: ClientId) -> Self {
+        // TODO: - PELE - Add validation that we have supplied a valid application_name
+        // and application_id according to vsomeip spec
+
         Self {
             name: name.to_string(),
             id,
@@ -53,22 +56,20 @@ where
 
 fn read_json_file(file_path: &Path) -> Result<Value, serde_json::Error> {
     let mut file = File::open(file_path).map_err(|e| {
-        println!("Failed to open file: {:?}", e);
+        println!(" Failed to open the file path: {:?}", e);
         serde_json::Error::io(e)
     })?;
 
     let mut content = String::new();
     file.read_to_string(&mut content).map_err(|e| {
-        println!("Failed to read file: {:?}", e);
+        println!(" Failed to read the file: {:?}", e);
         serde_json::Error::io(e)
     })?;
 
     let parsed = serde_json::from_str(&content).map_err(|e| {
-        println!("Failed to parse JSON file: {:?}", e);
+        println!(" Failed to parse JSON file  : {:?}", e);
         e
     })?;
-
-    println!("DEBUG: Read JSON Data: {:#?}", parsed);
 
     Ok(parsed)
 }
@@ -77,7 +78,7 @@ pub(crate) fn extract_application(file_path: &Path) -> Result<VsomeipApplication
     let json_data = read_json_file(file_path).map_err(|e| {
         UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
-            format!("Failed to read JSON file: {e}"),
+            format!("Failed to read JSON File: {e}"),
         )
     })?;
 
@@ -87,26 +88,19 @@ pub(crate) fn extract_application(file_path: &Path) -> Result<VsomeipApplication
         .ok_or_else(|| {
             UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,
-                format!("'applications' array is not found: {:#?}", json_data),
+                format!("'applications' array is not Found: {:?}", file_path),
             )
         })?;
 
     if applications.is_empty() {
         return Err(UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
-            "applications array is empty",
+            "applications array is Empty",
         ));
     }
 
     let app_config: VsomeipApplicationConfig = serde_json::from_value(applications[0].clone())
-        .map_err(|e| {
-            UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                format!("Failed to deserialize application config: {e}"),
-            )
-        })?;
-
-    println!("DEBUG: Extracted application config: {:#?}", app_config);
+        .map_err(|e| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, format!(": {e}")))?;
 
     Ok(app_config)
 }
@@ -115,7 +109,7 @@ pub(crate) fn extract_services(file_path: &Path) -> Result<Vec<ServiceConfig>, U
     let json_data = read_json_file(file_path).map_err(|e| {
         UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
-            format!("Failed to read JSON file: {e}"),
+            format!("Failed to read JSON File: {e}"),
         )
     })?;
 
@@ -125,14 +119,14 @@ pub(crate) fn extract_services(file_path: &Path) -> Result<Vec<ServiceConfig>, U
         .ok_or_else(|| {
             UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,
-                format!("'services' array is not found: {:#?}", json_data),
+                format!("'services' Array is not Found : {:?}", file_path),
             )
         })?;
 
     if services.is_empty() {
         return Err(UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
-            "services array is empty",
+            "services array is Empty",
         ));
     }
 
@@ -140,7 +134,7 @@ pub(crate) fn extract_services(file_path: &Path) -> Result<Vec<ServiceConfig>, U
         .map_err(|e| {
             UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,
-                format!("Failed to parse services: {e}"),
+                format!("Failed to change service: {e}"),
             )
         })?;
 
@@ -150,10 +144,13 @@ pub(crate) fn extract_services(file_path: &Path) -> Result<Vec<ServiceConfig>, U
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
+    use std::fs::File;
     use std::io::Write;
+    use std::path::PathBuf;
     use tempfile::NamedTempFile;
 
-    fn create_temp_file_with_content(content: &str) -> std::path::PathBuf {
+    fn create_temp_file_with_content(content: &str) -> (PathBuf, NamedTempFile) {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
 
         temp_file
@@ -161,15 +158,22 @@ mod tests {
             .expect("Failed to write temp file");
         temp_file.flush().expect("Failed to flush temp file");
 
-        let temp_path = temp_file.into_temp_path();
-        let path_buf = temp_path.to_path_buf();
+        let temp_file_path = temp_file.path();
 
-        std::mem::forget(temp_path);
-        path_buf
+        (temp_file_path.into(), temp_file)
+    }
+
+    #[test]
+    fn test_file_still_exists() -> Result<(), Box<dyn Error>> {
+        let (path_buf, _named_temp_file) = create_temp_file_with_content("abc");
+        let mut _file = File::open(path_buf).expect("unable to open path");
+
+        Ok(())
     }
 
     #[test]
     fn test_deserialize_hex_u16() {
+        // Test struct to use our custom deserializer
         #[derive(Deserialize)]
         struct TestHex {
             #[serde(deserialize_with = "deserialize_hex_u16")]
@@ -178,39 +182,39 @@ mod tests {
 
         let json = r#"{"value": "0x1A3F"}"#;
         let deserialized: Result<TestHex, _> = serde_json::from_str(json);
-        assert!(deserialized.is_ok());
+        assert!(
+            deserialized.is_ok(),
+            "Failed to deserialize valid hex string"
+        );
         assert_eq!(deserialized.unwrap().value, 0x1A3F);
     }
 
     #[test]
     fn test_read_json_file() {
-        let content = r#"{ "key": "value" }"#;
-        let file_path = create_temp_file_with_content(content);
+        let mut temp = tempfile::NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp, "{}", r#"{ "key": "value" }"#).expect("Failed to write json to temp file");
 
-        let result = read_json_file(&file_path);
-        assert!(result.is_ok());
+        temp.flush().expect("Failed to flush tempfile");
+
+        let path = temp.path();
+        let result = read_json_file(path);
+        assert!(result.is_ok(), "Failed to read JSON file");
         assert_eq!(result.unwrap(), serde_json::json!({"key": "value"}));
     }
 
     #[test]
     fn test_extract_application() {
         let content = r#"{
-             "applications": [
-                 { 
-                     "name": "TestApp", 
-                     "id": "0x1234"
-                 }
-             ]
-         }"#;
-
-        let file_path = create_temp_file_with_content(content);
-
-        let file_content = std::fs::read_to_string(&file_path).expect("Failed to read temp file");
-        println!("DEBUG: Temp JSON File Content:\n{}", file_content);
-
+              "applications": [
+                  { 
+                      "name": "TestApp", 
+                      "id": "0x1234"
+                  }
+              ]
+          }"#;
+        let (file_path, _temp_file) = create_temp_file_with_content(content);
         let result = extract_application(&file_path);
-        assert!(result.is_ok());
-
+        assert!(result.is_ok(), "Failed to extract application");
         let config = result.unwrap();
         assert_eq!(config.name, "TestApp");
         assert_eq!(config.id, 0x1234);
@@ -219,18 +223,16 @@ mod tests {
     #[test]
     fn test_extract_services() {
         let content = r#"{
-             "services": [
-                 { 
-                     "service": "0xABCD",
-                     "instance": "0x1234"
-                 }
-             ]
-         }"#;
-
-        let file_path = create_temp_file_with_content(content);
+              "services": [
+                  { 
+                      "service": "0xABCD",
+                      "instance": "0x1234"
+                  }
+              ]
+          }"#;
+        let (file_path, _temp_file) = create_temp_file_with_content(content);
         let result = extract_services(&file_path);
-
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Failed to extract services");
 
         let services = result.unwrap();
         assert_eq!(services.len(), 1);
