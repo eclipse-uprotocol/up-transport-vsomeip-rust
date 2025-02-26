@@ -477,7 +477,7 @@ impl UPTransportVsomeip {
         for service_config in service_configs {
             let registration_type = RegistrationType::Request;
             let service_config = Arc::new(service_config);
-            let ue_id = (service_config.instance as u32) << 16 | service_config.service as u32;
+            let ue_id = ((service_config.instance as u32) << 16) | service_config.service as u32;
 
             let comp_listener = ComparableListener::new(listener.clone());
             let source_filter = UUri::any();
@@ -551,7 +551,7 @@ impl UPTransportVsomeip {
         trace!("Got vsomeip service_configs: {service_configs:?}");
 
         for service_config in &service_configs {
-            let ue_id = (service_config.instance as u32) << 16 | service_config.service as u32;
+            let ue_id = ((service_config.instance as u32) << 16) | service_config.service as u32;
             let source_filter = UUri::any();
             let sink_filter =
                 any_uuri_fixed_authority_id(&self.storage.get_local_authority(), ue_id);
