@@ -191,13 +191,11 @@ mod tests {
 
     #[test]
     fn test_read_json_file() {
-        let mut temp = tempfile::NamedTempFile::new().expect("Failed to create temp file");
-        writeln!(temp, "{}", r#"{ "key": "value" }"#).expect("Failed to write json to temp file");
+        let content = r#"{ "key": "value" }"#;
+        let (file_path, _named_temp_file) = create_temp_file_with_content(content);
 
-        temp.flush().expect("Failed to flush tempfile");
+        let result = read_json_file(&file_path);
 
-        let path = temp.path();
-        let result = read_json_file(path);
         assert!(result.is_ok(), "Failed to read JSON file");
         assert_eq!(result.unwrap(), serde_json::json!({"key": "value"}));
     }
