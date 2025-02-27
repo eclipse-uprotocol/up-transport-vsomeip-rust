@@ -368,7 +368,7 @@ async fn point_to_point() {
         panic!("Unable to register with UTransport: {err}");
     }
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let client_config = "vsomeip_configs/client.json";
     let client_config = canonicalize(client_config).ok();
@@ -389,7 +389,7 @@ async fn point_to_point() {
         panic!();
     };
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let response_listener_check = Arc::new(ResponseListener::new());
     let response_listener: Arc<dyn UListener> = response_listener_check.clone();
@@ -406,7 +406,7 @@ async fn point_to_point() {
         panic!("Unable to register for returning Response: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let service_config = "vsomeip_configs/service.json";
     let service_config = canonicalize(service_config).ok();
@@ -427,7 +427,7 @@ async fn point_to_point() {
         panic!();
     };
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let service = Arc::new(service);
 
@@ -446,7 +446,7 @@ async fn point_to_point() {
         error!("Unable to register: {:?}", err);
     }
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Track the start time and set the duration for the loop
     let duration = Duration::from_millis(TEST_DURATION);
