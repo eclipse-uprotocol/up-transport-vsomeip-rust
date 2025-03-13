@@ -22,7 +22,7 @@ use up_rust::communication::{
     InMemoryRpcServer, RequestHandler, RpcServer, ServiceInvocationError, UPayload,
 };
 use up_rust::UPayloadFormat::UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY;
-use up_rust::{UCode, UStatus, UUri};
+use up_rust::{UAttributes, UCode, UStatus, UUri};
 use up_transport_vsomeip::UPTransportVsomeip;
 
 const HELLO_SERVICE_ID: u16 = 0x6000;
@@ -57,6 +57,7 @@ impl RequestHandler for ServiceRequestHandler {
     async fn handle_request(
         &self,
         resource_id: u16,
+        _uattributes: &UAttributes,
         request_payload: Option<UPayload>,
     ) -> Result<Option<UPayload>, ServiceInvocationError> {
         println!("ServiceRequestHandler: Received a resource_id: {resource_id} request_payload: {request_payload:?}");

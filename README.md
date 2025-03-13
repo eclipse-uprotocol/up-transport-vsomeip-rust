@@ -11,7 +11,7 @@ This library implements a uTransport client for vsomeip in Rust following the uP
 To build the library, setup the environment
 
 ``` bash
-source build/env_setup.sh
+source build/envsetup.sh
 ```
 
 then run:
