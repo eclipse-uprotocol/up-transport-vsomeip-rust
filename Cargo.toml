@@ -51,7 +51,6 @@ regex = { version = "1.10" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 tokio = { version = "1.35.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "tracing"] }
-up-rust = { version = "0.3.0" }
+up-rust = { version = "0.5.0" }
 vsomeip-proc-macro = { version = "0.4.0", path = "vsomeip-proc-macro" }
 vsomeip-sys = { version = "0.4.0", path = "vsomeip-sys", default-features = false }
-
