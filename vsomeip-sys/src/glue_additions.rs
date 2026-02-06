@@ -45,6 +45,7 @@ impl RuntimeWrapper {
     /// # TODO
     ///
     /// Add some runtime safety checks on the pointer
+    #[allow(clippy::mut_from_ref)]
     pub fn get_pinned(&self) -> Pin<&mut vsomeip::runtime> {
         unsafe { Pin::new_unchecked(self.get_mut().as_mut().unwrap()) }
     }
@@ -72,6 +73,7 @@ impl ApplicationWrapper {
     ///
     /// I do see a runtime panic here, perhaps when we try to work with the app before it's setup
     /// should probably do a sleep of half a second or something
+    #[allow(clippy::mut_from_ref)]
     pub fn get_pinned(&self) -> Pin<&mut vsomeip::application> {
         unsafe { Pin::new_unchecked(self.get_mut().as_mut().unwrap()) }
     }
@@ -270,6 +272,7 @@ impl MessageWrapper {
     /// # TODO
     ///
     /// Add some runtime safety checks on the pointer
+    #[allow(clippy::mut_from_ref)]
     pub fn get_pinned(&self) -> Pin<&mut vsomeip::message> {
         unsafe { Pin::new_unchecked(self.get_mut().as_mut().unwrap()) }
     }
@@ -293,6 +296,7 @@ impl MessageWrapper {
     /// # TODO
     ///
     /// Add some runtime safety checks on the pointer
+    #[allow(clippy::mut_from_ref)]
     pub fn get_message_base_pinned(&self) -> Pin<&mut vsomeip::message_base> {
         unsafe {
             let msg_ptr: *mut message = self.get_mut();
@@ -389,6 +393,7 @@ impl PayloadWrapper {
     /// # TODO
     ///
     /// Add some runtime safety checks on the pointer
+    #[allow(clippy::mut_from_ref)]
     pub fn get_pinned(&self) -> Pin<&mut vsomeip::payload> {
         unsafe { Pin::new_unchecked(self.get_mut().as_mut().unwrap()) }
     }

@@ -11,6 +11,8 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
+#![allow(unused_attributes)]
+
 mod cxx_bridge;
 
 use autocxx::prelude::*;
@@ -410,8 +412,6 @@ mod tests {
         let duration = Duration::from_millis(test_duration);
         let start_time = Instant::now();
 
-        #[allow(unused_variables)]
-        let mut iterations: usize = 0;
         while Instant::now().duration_since(start_time) < duration {
             let vsomeip_payload =
                 make_payload_wrapper(runtime_wrapper.get_pinned().create_payload());
@@ -425,8 +425,6 @@ mod tests {
                 attachable_payload,
                 true,
             );
-
-            iterations += 1;
         }
 
         thread::sleep(Duration::from_millis(500));
