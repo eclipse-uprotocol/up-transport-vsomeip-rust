@@ -148,7 +148,7 @@ impl UPTransportVsomeip {
     ///
     /// * `local_authority_name` - authority_name of the host device
     /// * `remote_authority_name` - authority_name to attach for messages originating from SOME/IP network.
-    ///                             Should be set to `IP:port` of the endpoint mDevice
+    ///   Should be set to `IP:port` of the endpoint mDevice
     /// * `ue_id` - the ue_id of the uEntity
     /// * `config_path` - path to a JSON vsomeip configuration file
     ///
@@ -183,7 +183,7 @@ impl UPTransportVsomeip {
     ///
     /// * `local_authority_name` - authority_name of the host device
     /// * `remote_authority_name` - authority_name to attach for messages originating from SOME/IP network
-    ///                             Should be set to `IP:port` of the endpoint mDevice
+    ///   Should be set to `IP:port` of the endpoint mDevice
     /// * `ue_id` - the ue_id of the uEntity
     pub fn new(
         vsomeip_application_config: VsomeipApplicationConfig,
