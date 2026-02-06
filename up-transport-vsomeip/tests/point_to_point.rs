@@ -353,7 +353,8 @@ async fn point_to_point() {
     };
     let point_to_point_client = Arc::new(point_to_point_client);
 
-    let source = UUri::any();
+    let source = any_from_authority(PTP_AUTHORITY_NAME);
+    let legacy_source = UUri::any();
     let sink = any_from_authority(PTP_AUTHORITY_NAME);
 
     let point_to_point_listener_check =
@@ -361,11 +362,18 @@ async fn point_to_point() {
     let point_to_point_listener: Arc<dyn UListener> = point_to_point_listener_check.clone();
     trace!("Registering point to point listener: Start");
     let reg_res = point_to_point_client
-        .register_listener(&source, Some(&sink), point_to_point_listener)
+        .register_listener(&source, Some(&sink), point_to_point_listener.clone())
         .await;
     trace!("Registering point to point listener: End");
     if let Err(err) = reg_res {
         panic!("Unable to register with UTransport: {err}");
+    }
+
+    let fallback_reg_res = point_to_point_client
+        .register_listener(&legacy_source, Some(&sink), point_to_point_listener)
+        .await;
+    if let Err(err) = fallback_reg_res {
+        trace!("Fallback point-to-point listener registration not applied: {err}");
     }
 
     tokio::time::sleep(Duration::from_millis(200)).await;
