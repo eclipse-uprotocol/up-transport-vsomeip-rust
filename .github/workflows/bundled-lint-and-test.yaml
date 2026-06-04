@@ -44,7 +44,7 @@ jobs:
       generic_cpp_stdlib_path: ${{ steps.set_env.outputs.generic_cpp_stdlib_path }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Add execute permissions for envsetup
         run: chmod +x build/envsetup.sh
@@ -66,7 +66,7 @@ jobs:
        GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install C++ dependencies
         run: sudo apt-get install -y build-essential cmake libboost-all-dev libclang-dev
@@ -113,8 +113,8 @@ jobs:
        GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Install C++ dependencies
         run: sudo apt-get install -y build-essential cmake libboost-all-dev libclang-dev
@@ -153,25 +153,25 @@ jobs:
           LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${VSOMEIP_INSTALL_PATH}/lib cargo test -- --test-threads 1
 
       - name: Upload coverage report (xml)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Test Coverage Results (xml)
           path: cobertura.xml
 
       - name: Upload coverage report (lcov)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Test Coverage Results (lcov)
           path: lcov.info
 
       - name: Upload coverage report (html)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Test Coverage Results (html)
           path: tarpaulin-report.html
 
       # - name: Upload coverage report
-      #   uses: actions/upload-artifact@v4
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       #   with:
       #     name: Code coverage report
       #     path: cobertura.xml
@@ -186,7 +186,7 @@ jobs:
        GENERIC_CPP_STDLIB_PATH: ${{ needs.set-env.outputs.generic_cpp_stdlib_path }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install C++ dependencies
         run: sudo apt-get install -y build-essential cmake libboost-all-dev libclang-dev
