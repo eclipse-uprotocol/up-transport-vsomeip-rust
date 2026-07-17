@@ -124,7 +124,7 @@ jobs:
 
       - name: Cache vsomeip build
         id: cache-vsomeip
-        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0-working
         with:
           path: ${{ env.VSOMEIP_INSTALL_PATH }}
           key: ${{ runner.os }}-vsomeip-${{ hashFiles(env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD) }}
@@ -144,7 +144,7 @@ jobs:
 
       - name: Save vsomeip build to cache
         if: steps.cache-vsomeip.outputs.cache-hit != 'true'
-        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0-working
         with:
           path: ${{ env.VSOMEIP_INSTALL_PATH }}
           key: ${{ runner.os }}-vsomeip-${{ hashFiles(env.VSOMEIP_SOURCE_PATH_WITH_WILDCARD) }}
@@ -182,7 +182,7 @@ jobs:
           echo "cache_key: ${{ env.CACHE_KEY }}"
 
       - name: Restore vsomeip build cache
-        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0-working
         with:
           path: ${{ env.VSOMEIP_INSTALL_PATH }}
           key: ${{ env.CACHE_KEY }}
@@ -218,7 +218,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
 
       - name: Install C++ dependencies
         if: steps.cache-vsomeip.outputs.cache-hit != 'true'
@@ -244,7 +244,7 @@ jobs:
           echo "cache_key: ${{ env.CACHE_KEY }}"
 
       - name: Restore vsomeip build cache
-        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0-working
         with:
           path: ${{ env.VSOMEIP_INSTALL_PATH }}
           key: ${{ env.CACHE_KEY }}
@@ -322,7 +322,7 @@ jobs:
           echo "cache_key: ${{ env.CACHE_KEY }}"
 
       - name: Restore vsomeip build cache
-        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0-working
         with:
           path: ${{ env.VSOMEIP_INSTALL_PATH }}
           key: ${{ env.CACHE_KEY }}
