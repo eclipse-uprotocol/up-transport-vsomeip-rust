@@ -1,0 +1,309 @@
+# ********************************************************************************
+#  Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+#  See the NOTICE file(s) distributed with this work for additional
+#  information regarding copyright ownership.
+#
+#  This program and the accompanying materials are made available under the
+#  terms of the Apache License Version 2.0 which is available at
+#  https://www.apache.org/licenses/LICENSE-2.0
+#
+#  SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************/
+
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  authenticate:
+    name: Test Trusted Publishing authentication
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    permissions:
+      id-token: write
+    steps:
+      - name: Exchange and revoke a short-lived token
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+  validate-release:
+    name: Validate release tag and metadata
+    if: github.event_name == 'push'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag, commit, and workspace metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must have the form vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+
+          metadata="$(cargo metadata --no-deps --format-version 1)"
+          version="$(jq -er '.packages[] | select(.name == "up-transport-vsomeip") | .version' <<<"$metadata")"
+
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match workspace version $version" >&2
+            exit 1
+          fi
+
+          git fetch origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "Tagged commit $GITHUB_SHA is not reachable from main" >&2
+            exit 1
+          fi
+
+          jq -e --arg version "$version" '
+            [.packages[] | select(.publish != []) | .name] | sort ==
+              ["up-transport-vsomeip", "vsomeip-proc-macro", "vsomeip-sys"]
+          ' <<<"$metadata" >/dev/null
+
+          jq -e --arg version "$version" '
+            [.packages[] | select(.publish != []) | .version] | all(. == $version)
+          ' <<<"$metadata" >/dev/null
+
+          release_line="${version%.*}"
+          for dependency in vsomeip-proc-macro vsomeip-sys; do
+            requirement="$(jq -er --arg dependency "$dependency" '
+              .packages[] |
+              select(.name == "up-transport-vsomeip") |
+              .dependencies[] |
+              select(.name == $dependency) |
+              .req
+            ' <<<"$metadata")"
+            requirement_version="${requirement#^}"
+            if [[ "${requirement_version%.*}" != "$release_line" ]]; then
+              echo "$dependency requirement $requirement does not match release line $release_line" >&2
+              exit 1
+            fi
+          done
+
+          up_rust_requirement="$(jq -er '
+            .packages[] |
+            select(.name == "up-transport-vsomeip") |
+            .dependencies[] |
+            select(.name == "up-rust") |
+            .req
+          ' <<<"$metadata")"
+          if [[ "$up_rust_requirement" != "^0.9.0" ]]; then
+            echo "up-rust requirement must be ^0.9.0, found $up_rust_requirement" >&2
+            exit 1
+          fi
+
+          example_metadata="$(cargo metadata --no-deps --format-version 1 --manifest-path example-utils/hello-world-protos/Cargo.toml)"
+          jq -e '
+            .packages[] |
+            select(.name == "hello-world-protos") |
+            .publish == []
+          ' <<<"$example_metadata" >/dev/null
+
+  bundled:
+    name: Validate bundled build
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/bundled-lint-and-test.yaml
+
+  unbundled:
+    name: Validate unbundled build
+    if: github.event_name == 'push'
+    needs: bundled
+    permissions:
+      contents: read
+    uses: ./.github/workflows/unbundled-lint-and-test.yaml
+
+  publish:
+    name: Publish workspace crates
+    if: github.event_name == 'push'
+    needs:
+      - validate-release
+      - unbundled
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake jq libboost-all-dev libclang-dev
+
+      - name: Configure native build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          source build/envsetup.sh highest
+          {
+            echo "ARCH_SPECIFIC_CPP_STDLIB_PATH=$ARCH_SPECIFIC_CPP_STDLIB_PATH"
+            echo "GENERIC_CPP_STDLIB_PATH=$GENERIC_CPP_STDLIB_PATH"
+            echo "VSOMEIP_INSTALL_PATH=$RUNNER_TEMP/vsomeip-install"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/vsomeip-install"
+
+      - name: Read release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "up-transport-vsomeip") | .version')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check for an existing partial release
+        id: existing
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_crate() {
+            local crate="$1"
+            local output_name="$2"
+            local response="$RUNNER_TEMP/${crate}-version.json"
+            local status
+            status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+              --header 'User-Agent: up-transport-vsomeip-rust release workflow' \
+              "https://crates.io/api/v1/crates/${crate}/${VERSION}")"
+
+            case "$status" in
+              200)
+                jq -e --arg crate "$crate" --arg version "$VERSION" '
+                  .version.crate == $crate and
+                  .version.num == $version and
+                  (.version.yanked | not)
+                ' "$response" >/dev/null
+                echo "${output_name}=true" >> "$GITHUB_OUTPUT"
+                ;;
+              404)
+                echo "${output_name}=false" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "crates.io returned HTTP $status for ${crate} ${VERSION}" >&2
+                cat "$response" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          check_crate vsomeip-proc-macro proc_macro_exists
+          check_crate vsomeip-sys sys_exists
+          check_crate up-transport-vsomeip transport_exists
+
+      - name: Verify vsomeip-proc-macro package
+        if: steps.existing.outputs.proc_macro_exists == 'false'
+        run: cargo package -p vsomeip-proc-macro
+
+      - name: Authenticate for vsomeip-proc-macro
+        if: steps.existing.outputs.proc_macro_exists == 'false'
+        id: auth_proc_macro
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      - name: Publish vsomeip-proc-macro
+        if: steps.existing.outputs.proc_macro_exists == 'false'
+        run: cargo publish --no-verify -p vsomeip-proc-macro
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_proc_macro.outputs.token }}
+
+      - name: Verify vsomeip-sys package
+        if: steps.existing.outputs.sys_exists == 'false'
+        run: cargo package -p vsomeip-sys
+
+      - name: Authenticate for vsomeip-sys
+        if: steps.existing.outputs.sys_exists == 'false'
+        id: auth_sys
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      - name: Publish vsomeip-sys
+        if: steps.existing.outputs.sys_exists == 'false'
+        run: cargo publish --no-verify -p vsomeip-sys
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_sys.outputs.token }}
+
+      - name: Wait for internal crates
+        if: steps.existing.outputs.transport_exists == 'false'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 30); do
+            if cargo info --registry crates-io "vsomeip-proc-macro@${VERSION}" >/dev/null 2>&1 && \
+              cargo info --registry crates-io "vsomeip-sys@${VERSION}" >/dev/null 2>&1; then
+              exit 0
+            fi
+
+            echo "Waiting for internal crates (attempt ${attempt}/30)"
+            sleep 10
+          done
+
+          echo "Internal crates did not become available within five minutes" >&2
+          exit 1
+
+      - name: Verify up-transport-vsomeip package
+        if: steps.existing.outputs.transport_exists == 'false'
+        run: cargo package -p up-transport-vsomeip
+
+      - name: Authenticate for up-transport-vsomeip
+        if: steps.existing.outputs.transport_exists == 'false'
+        id: auth_transport
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      - name: Publish up-transport-vsomeip
+        if: steps.existing.outputs.transport_exists == 'false'
+        run: cargo publish --no-verify -p up-transport-vsomeip
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_transport.outputs.token }}
+
+      - name: Summarize publication
+        env:
+          PROC_MACRO_EXISTS: ${{ steps.existing.outputs.proc_macro_exists }}
+          SYS_EXISTS: ${{ steps.existing.outputs.sys_exists }}
+          TRANSPORT_EXISTS: ${{ steps.existing.outputs.transport_exists }}
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          result() {
+            if [[ "$1" == "true" ]]; then
+              echo "already present"
+            else
+              echo "published"
+            fi
+          }
+
+          {
+            echo "## crates.io publication"
+            echo
+            echo "| Crate | Version | Result |"
+            echo "| --- | --- | --- |"
+            echo "| vsomeip-proc-macro | $VERSION | $(result "$PROC_MACRO_EXISTS") |"
+            echo "| vsomeip-sys | $VERSION | $(result "$SYS_EXISTS") |"
+            echo "| up-transport-vsomeip | $VERSION | $(result "$TRANSPORT_EXISTS") |"
+          } >> "$GITHUB_STEP_SUMMARY"
