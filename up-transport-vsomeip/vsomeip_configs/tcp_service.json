@@ -13,5 +13,10 @@
       "reliable": "30509"
     }
   ],
-  "routing": "4660"
+  "routing": "4660",
+  "logging": {
+    "level": "error",
+    "console": "true",
+    "file": { "enable": "false" }
+  }
 }

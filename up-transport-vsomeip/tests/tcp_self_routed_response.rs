@@ -36,6 +36,18 @@ impl RawClient {
                     }
                 }
             };
+            let local_addr = s.local_addr().unwrap();
+            let peer_addr = s.peer_addr().unwrap();
+            let is_ip = local_addr.is_ipv4() || local_addr.is_ipv6();
+
+            println!(">>> [TCP CLIENT] System Socket Verification:");
+            println!("    - Local OS socket : {}", local_addr);
+            println!("    - Remote OS socket: {}", peer_addr);
+            println!("    - Protocol Stack  : {}", if is_ip { "TCP/IP (Network Stack)" } else { "IPC" });
+            
+            // Assert mathematically from the OS that this is a TCP/IP socket, not an IPC socket
+            assert!(is_ip, "The socket must be a TCP/IP socket, but an IPC was detected!");
+            
             tx.send(Ev::Connected).ok();
 
             // Send REQUEST
@@ -50,8 +62,8 @@ impl RawClient {
                 c_id[0], c_id[1], s_id[0], s_id[1],
                 1, 1, 0x00, 0x00, // type=0x00 REQUEST, rc=0
             ];
-            
-            s.write_all(&req).expect("write");
+
+          s.write_all(&req).expect("write");
             tx.send(Ev::ReqSent).ok();
 
             // Receive RESPONSE
@@ -83,11 +95,32 @@ impl UListener for MyListener {
     async fn on_receive(&self, msg: UMessage) {
         self.count.fetch_add(1, Ordering::SeqCst);
         
-        let sink = msg.attributes.source.as_ref().unwrap().clone();
-        let source = msg.attributes.sink.as_ref().unwrap().clone();
+        let req_source = msg.attributes.source.as_ref().unwrap().clone();
+        let req_sink = msg.attributes.sink.as_ref().unwrap().clone();
         let reqid = msg.attributes.id.as_ref().unwrap().clone();
+        
+        println!("\n--------------------------------------------------");
+        println!(">>> [UPROTOCOL APP] 📥 UMessage REQUEST received from Transport:");
+        println!("    - Request SOURCE (Sender): {:#x}", req_source.ue_id);
+        println!("    - Request SINK (Dest)  : {:#x}", req_sink.ue_id);
+        
+        if req_source.ue_id == 0x1234 {
+            println!("    ❌ BUG DETECTED! Request SOURCE is the Server's own ID (0x1234).");
+            panic!("REGRESSION: The ue_id must be mapped to the original vSomeIP Client ID, not the Server ID.");
+        } else {
+            println!("    ✅ FIX SUCCESSFUL! Request SOURCE is correctly mapped to Client ID ({:#x}).", req_source.ue_id);
+        }
 
-        let resp = UMessageBuilder::response(sink, reqid, source)
+        // Generate response by swapping source and sink
+        let resp_sink = req_source;
+        let resp_source = req_sink;
+
+        println!(">>> [UPROTOCOL APP] 📤 Generating UMessage RESPONSE (swapping source/sink):");
+        println!("    - Response SOURCE (Sender): {:#x}", resp_source.ue_id);
+        println!("    - Response SINK (Dest)  : {:#x}", resp_sink.ue_id);
+        println!("--------------------------------------------------\n");
+
+        let resp = UMessageBuilder::response(resp_sink, reqid, resp_source)
             .with_comm_status(UCode::OK)
             .build_with_payload(vec![1, 2, 3], UPayloadFormat::UPAYLOAD_FORMAT_RAW)
             .unwrap();
