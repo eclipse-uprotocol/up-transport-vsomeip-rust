@@ -1,0 +1,17 @@
+{
+  "unicast": "127.0.0.1",
+  "applications": [
+    {
+      "name": "4660",
+      "id": "0x1234"
+    }
+  ],
+  "services": [
+    {
+      "service": "0x1234",
+      "instance": "0x0001",
+      "reliable": "30509"
+    }
+  ],
+  "routing": "4660"
+}

@@ -374,9 +374,10 @@ impl VsomeipMessageToUMessage {
             )
         })?;
 
+        let (client_id, _) = split_u32_to_u16(request_id);
         let source = UUri::try_from_parts(
             mechatronics_authority_name,
-            self_uuri.ue_id,
+            client_id as u32,
             self_uuri.ue_version_major.try_into().unwrap(), // we have checked this fits prior
             0, // set to 0 as this is the resource_id of "intended for me"
         )
