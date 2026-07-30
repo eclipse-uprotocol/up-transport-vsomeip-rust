@@ -43,11 +43,21 @@ impl RawClient {
             println!(">>> [TCP CLIENT] System Socket Verification:");
             println!("    - Local OS socket : {}", local_addr);
             println!("    - Remote OS socket: {}", peer_addr);
-            println!("    - Protocol Stack  : {}", if is_ip { "TCP/IP (Network Stack)" } else { "IPC" });
-            
+            println!(
+                "    - Protocol Stack  : {}",
+                if is_ip {
+                    "TCP/IP (Network Stack)"
+                } else {
+                    "IPC"
+                }
+            );
+
             // Assert mathematically from the OS that this is a TCP/IP socket, not an IPC socket
-            assert!(is_ip, "The socket must be a TCP/IP socket, but an IPC was detected!");
-            
+            assert!(
+                is_ip,
+                "The socket must be a TCP/IP socket, but an IPC was detected!"
+            );
+
             tx.send(Ev::Connected).ok();
 
             // Send REQUEST
@@ -55,15 +65,15 @@ impl RawClient {
             let meth = 0x0421u16.to_be_bytes();
             let c_id = client_id.to_be_bytes();
             let s_id = session_id.to_be_bytes();
-            
+
             let req = vec![
-                svc[0], svc[1], meth[0], meth[1],
-                0, 0, 0, 8, // length (8 bytes after offset 7)
-                c_id[0], c_id[1], s_id[0], s_id[1],
-                1, 1, 0x00, 0x00, // type=0x00 REQUEST, rc=0
+                svc[0], svc[1], meth[0], meth[1], 0, 0, 0,
+                8, // length (8 bytes after offset 7)
+                c_id[0], c_id[1], s_id[0], s_id[1], 1, 1, 0x00,
+                0x00, // type=0x00 REQUEST, rc=0
             ];
 
-          s.write_all(&req).expect("write");
+            s.write_all(&req).expect("write");
             tx.send(Ev::ReqSent).ok();
 
             // Receive RESPONSE
@@ -71,7 +81,11 @@ impl RawClient {
             if s.read_exact(&mut hdr).is_ok() {
                 let r_c_id = u16::from_be_bytes([hdr[8], hdr[9]]);
                 let r_s_id = u16::from_be_bytes([hdr[10], hdr[11]]);
-                tx.send(Ev::RespReceived { client_id: r_c_id, session_id: r_s_id }).ok();
+                tx.send(Ev::RespReceived {
+                    client_id: r_c_id,
+                    session_id: r_s_id,
+                })
+                .ok();
             } else {
                 tx.send(Ev::Closed).ok();
             }
@@ -94,21 +108,24 @@ struct MyListener {
 impl UListener for MyListener {
     async fn on_receive(&self, msg: UMessage) {
         self.count.fetch_add(1, Ordering::SeqCst);
-        
+
         let req_source = msg.attributes.source.as_ref().unwrap().clone();
         let req_sink = msg.attributes.sink.as_ref().unwrap().clone();
         let reqid = msg.attributes.id.as_ref().unwrap().clone();
-        
+
         println!("\n--------------------------------------------------");
         println!(">>> [UPROTOCOL APP] 📥 UMessage REQUEST received from Transport:");
         println!("    - Request SOURCE (Sender): {:#x}", req_source.ue_id);
         println!("    - Request SINK (Dest)  : {:#x}", req_sink.ue_id);
-        
+
         if req_source.ue_id == 0x1234 {
             println!("    ❌ BUG DETECTED! Request SOURCE is the Server's own ID (0x1234).");
             panic!("REGRESSION: The ue_id must be mapped to the original vSomeIP Client ID, not the Server ID.");
         } else {
-            println!("    ✅ FIX SUCCESSFUL! Request SOURCE is correctly mapped to Client ID ({:#x}).", req_source.ue_id);
+            println!(
+                "    ✅ FIX SUCCESSFUL! Request SOURCE is correctly mapped to Client ID ({:#x}).",
+                req_source.ue_id
+            );
         }
 
         // Generate response by swapping source and sink
@@ -130,8 +147,7 @@ impl UListener for MyListener {
 }
 
 async fn build_service() -> (Arc<UPTransportVsomeip>, UUri, UUri) {
-    let cfg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("vsomeip_configs/tcp_service.json");
+    let cfg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vsomeip_configs/tcp_service.json");
     std::env::set_var("VSOMEIP_CONFIGURATION", cfg.to_str().unwrap());
     let t = Arc::new(
         UPTransportVsomeip::new_with_config(
@@ -152,8 +168,11 @@ async fn test_self_routed_response() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let (service_transport, cu, su) = build_service().await;
-    let listener = Arc::new(MyListener { transport: service_transport.clone(), count: AtomicUsize::new(0) });
-    
+    let listener = Arc::new(MyListener {
+        transport: service_transport.clone(),
+        count: AtomicUsize::new(0),
+    });
+
     // Register listener for REQUESTs (source = client, sink = service)
     service_transport
         .register_listener(&cu, Some(&su), listener.clone() as _)
@@ -172,9 +191,15 @@ async fn test_self_routed_response() {
     assert!(matches!(client.wait(), Some(Ev::ReqSent)));
 
     match client.wait() {
-        Some(Ev::RespReceived { client_id, session_id }) => {
+        Some(Ev::RespReceived {
+            client_id,
+            session_id,
+        }) => {
             assert_eq!(session_id, expected_session_id);
-            assert_eq!(client_id, expected_client_id, "BUG: vsomeip overwrote the Client ID with its own local ID!");
+            assert_eq!(
+                client_id, expected_client_id,
+                "BUG: vsomeip overwrote the Client ID with its own local ID!"
+            );
         }
         _ => panic!("Did not receive response"),
     }
