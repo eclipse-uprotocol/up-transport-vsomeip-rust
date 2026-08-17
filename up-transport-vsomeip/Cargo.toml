@@ -44,7 +44,7 @@ vsomeip-proc-macro = { workspace = true }
 vsomeip-sys = { workspace = true }
 
 [dev-dependencies]
-hello-world-protos = { path = "../example-utils/hello-world-protos" }
+hello-world-protos = { path = "../example-utils/hello-world-protos", version = "0.7.0-SNAPSHOT" }
 protobuf = { workspace = true }
 serial_test = { workspace = true }
 test-case = { version = "3.3" }

@@ -1,0 +1,45 @@
+# ********************************************************************************
+#  Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+#  See the NOTICE file(s) distributed with this work for additional
+#  information regarding copyright ownership.
+#
+#  This program and the accompanying materials are made available under the
+#  terms of the Apache License Version 2.0 which is available at
+#  https://www.apache.org/licenses/LICENSE-2.0
+#
+#  SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************/
+
+# Config file for cargo deny
+# For all options see https://github.com/EmbarkStudios/cargo-deny/blob/main/deny.template.toml
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    # Unicode-3.0 is not (yet) on the Eclipse Foundation's list of approved licenses
+    # however, all of its predecessors are, thus we assume that 3.0 is also ok to use
+    "Unicode-3.0",
+    "Zlib",
+]
+private = { ignore = true }
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+skip-tree = [
+    { crate = "windows-sys", reason = "a foundational crate for many that bumps far too frequently to ever have a shared version" },
+    { crate = "autocxx-build", reason = "only used during the build process" },
+    { crate = "cxx-build", reason = "only used during the build process" },
+    { crate = "reqwest", reason = "only used during the build process" },
+]
+
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2024-0375", reason = "The atty crate is a transitive dependency of autocxx-build which is only used during the build process"},
+    { id = "RUSTSEC-2024-0370", reason = "The proc-macro-error crate is a transitive dependency of autocxx which is only used during the build process"},
+]
