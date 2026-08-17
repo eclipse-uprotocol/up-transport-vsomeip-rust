@@ -97,17 +97,16 @@ jobs:
           LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$VSOMEIP_INSTALL_PATH/lib \
             cargo test --verbose --workspace --all-targets
 
-# disabled until we have cargo-deny configuration set up for this repo
-#   deny:
-#     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-deny-check.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
-#     with:
-#       arguments: --all-features --locked --exclude-dev
+  deny:
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-deny-check.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
+    with:
+      arguments: --all-features --locked --exclude-dev
 
-# disabled until we have a SOME/IP transport spec that includes OFT specification items
-#   current-spec-compliance:
-#     uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
-#     with:
-#       env-file-suffix: "oft-current"
+  current-spec-compliance:
+    if: false # disabled until we have a SOME/IP transport spec that includes OFT specification items
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
+    with:
+      env-file-suffix: "oft-current"
 
   coverage:
     if: false # disabled for the time being because building vsomeip-sys fails as part of running tarpaulin
