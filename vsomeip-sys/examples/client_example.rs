@@ -1,66 +1,58 @@
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
 use cxx::let_cxx_string;
-use std::thread;
-use std::thread::sleep;
 use std::time::Duration;
+use tracing::info;
 use vsomeip_sys::glue::{
     make_application_wrapper, make_message_wrapper, make_payload_wrapper, make_runtime_wrapper,
 };
 use vsomeip_sys::vsomeip::runtime;
 
-const SAMPLE_SERVICE_ID: u16 = 0x1234;
-// const SAMPLE_INSTANCE_ID: u16 = 0x5678;
-const SAMPLE_INSTANCE_ID: u16 = 1;
-const SAMPLE_METHOD_ID: u16 = 0x0421;
-const APP_NAME: &str = "Hello";
+use common::{SAMPLE_INSTANCE_ID, SAMPLE_INTERFACE_VERSION, SAMPLE_METHOD_ID, SAMPLE_SERVICE_ID};
 
-fn start_app() {
-    let my_runtime = runtime::get();
-    let runtime_wrapper = make_runtime_wrapper(my_runtime);
+const APP_NAME: &str = "Hello World Client";
 
-    let_cxx_string!(my_app_str = APP_NAME);
-    let Some(app_wrapper) =
-        make_application_wrapper(runtime_wrapper.get_pinned().create_application(&my_app_str))
-    else {
-        panic!("No app created for app_name: {APP_NAME}");
-    };
-    app_wrapper.get_pinned().init();
-    app_wrapper.get_pinned().start();
-}
+mod common;
 
-fn main() {
-    thread::spawn(move || {
-        start_app();
-    });
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = tracing_subscriber::fmt::try_init();
+    let client_registered = common::start_app(APP_NAME);
 
-    println!("past the thread spawn");
-
-    sleep(Duration::from_millis(2000));
-
-    println!("past the sleep");
+    // wait for this client to be registered with the runtime before starting to send messages
+    client_registered.notified().await;
 
     let my_runtime = runtime::get();
     let runtime_wrapper = make_runtime_wrapper(my_runtime);
 
-    println!("after we get the runtime");
-
-    let_cxx_string!(my_app_str = APP_NAME);
-
+    let_cxx_string!(app_name = APP_NAME);
     let Some(app_wrapper) =
-        make_application_wrapper(runtime_wrapper.get_pinned().get_application(&my_app_str))
+        make_application_wrapper(runtime_wrapper.get_pinned().get_application(&app_name))
     else {
-        panic!("Unable to find application");
+        return Err(Box::from(format!(
+            "No vsomeip application found for name: {APP_NAME}"
+        )));
     };
 
     app_wrapper.get_pinned().request_service(
         SAMPLE_SERVICE_ID,
         SAMPLE_INSTANCE_ID,
-        vsomeip_sys::vsomeip::ANY_MAJOR,
+        SAMPLE_INTERFACE_VERSION,
         vsomeip_sys::vsomeip::ANY_MINOR,
     );
 
     loop {
-        sleep(Duration::from_millis(1000));
-
         let request = make_message_wrapper(runtime_wrapper.get_pinned().create_request(true));
         request
             .get_message_base_pinned()
@@ -70,19 +62,21 @@ fn main() {
             .set_instance(SAMPLE_INSTANCE_ID);
         request
             .get_message_base_pinned()
+            .set_interface_version(SAMPLE_INTERFACE_VERSION);
+        request
+            .get_message_base_pinned()
             .set_method(SAMPLE_METHOD_ID);
 
         let mut payload_wrapper =
             make_payload_wrapper(runtime_wrapper.get_pinned().create_payload());
 
-        let payload_string = "Hello, vsomeip!";
-        let payload_data = payload_string.as_bytes();
-
-        payload_wrapper.set_data_safe(payload_data);
+        payload_wrapper.set_data_safe(b"Hello, vsomeip!");
         request.set_message_payload(&mut payload_wrapper);
 
         let shared_ptr_message = request.as_ref().unwrap().get_shared_ptr();
-        println!("attempting send...");
+        info!("sending request");
         app_wrapper.get_pinned().send(shared_ptr_message);
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }

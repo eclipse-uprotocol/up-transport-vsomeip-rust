@@ -1,61 +1,56 @@
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
 use cxx::let_cxx_string;
-use std::thread;
-use std::thread::sleep;
 use std::time::Duration;
+use tracing::debug;
 use vsomeip_sys::glue::{make_application_wrapper, make_payload_wrapper, make_runtime_wrapper};
-use vsomeip_sys::vsomeip;
 use vsomeip_sys::vsomeip::runtime;
 
-const SAMPLE_SERVICE_ID: u16 = 0x1234;
-const SAMPLE_INSTANCE_ID: u16 = 1;
+use common::{
+    SAMPLE_EVENTGROUP_ID, SAMPLE_EVENT_ID, SAMPLE_INSTANCE_ID, SAMPLE_INTERFACE_VERSION,
+    SAMPLE_SERVICE_ID,
+};
 
-const SAMPLE_EVENTGROUP_ID: u16 = 0x4465;
-const SAMPLE_EVENT_ID: u16 = 0x4465;
 const APP_NAME: &str = "Publisher";
 
-fn start_app() {
-    let my_runtime = runtime::get();
-    let runtime_wrapper = make_runtime_wrapper(my_runtime);
+mod common;
 
-    let_cxx_string!(my_app_str = APP_NAME);
-    let Some(app_wrapper) =
-        make_application_wrapper(runtime_wrapper.get_pinned().create_application(&my_app_str))
-    else {
-        panic!("No app created for app_name: {APP_NAME}");
-    };
-    app_wrapper.get_pinned().init();
-    app_wrapper.get_pinned().start();
-}
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = tracing_subscriber::fmt::try_init();
+    let client_registered = common::start_app(APP_NAME);
 
-fn main() {
-    thread::spawn(move || {
-        start_app();
-    });
-
-    println!("past the thread spawn");
-
-    sleep(Duration::from_millis(2000));
-
-    println!("past the sleep");
+    // wait for this client to be registered with the runtime before starting to send messages
+    client_registered.notified().await;
 
     let my_runtime = runtime::get();
     let runtime_wrapper = make_runtime_wrapper(my_runtime);
 
-    println!("after we get the runtime");
-
-    let_cxx_string!(my_app_str = APP_NAME);
-
+    let_cxx_string!(app_name = APP_NAME);
     let Some(app_wrapper) =
-        make_application_wrapper(runtime_wrapper.get_pinned().get_application(&my_app_str))
+        make_application_wrapper(runtime_wrapper.get_pinned().get_application(&app_name))
     else {
-        panic!("No app found for app_name: {APP_NAME}");
+        return Err(Box::from(format!(
+            "No vsomeip application found for name: {APP_NAME}"
+        )));
     };
 
     app_wrapper.get_pinned().offer_service(
         SAMPLE_SERVICE_ID,
         SAMPLE_INSTANCE_ID,
-        vsomeip::ANY_MAJOR,
-        vsomeip::ANY_MINOR,
+        SAMPLE_INTERFACE_VERSION,
+        0,
     );
 
     app_wrapper.offer_single_event_safe(
@@ -65,19 +60,13 @@ fn main() {
         SAMPLE_EVENTGROUP_ID,
     );
 
+    let payload_data: Vec<u8> = vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09];
+
     loop {
         let payload_wrapper = make_payload_wrapper(runtime_wrapper.get_pinned().create_payload());
-
-        let mut payload_data: Vec<u8> = Vec::new();
-        for i in 0..10 {
-            payload_data.push((i as u16 % 256) as u8);
-        }
-
         payload_wrapper.set_data_safe(&payload_data);
 
-        println!("packed message with payload:\n{payload_data:?}");
-
-        println!("attempting notify...");
+        debug!("Sending notification [service ID: {SAMPLE_SERVICE_ID:#04X}, instance ID: {SAMPLE_INSTANCE_ID:#04X}, event ID: {SAMPLE_EVENT_ID:#04X}]: {payload_data:?}");
 
         app_wrapper.get_pinned().notify(
             SAMPLE_SERVICE_ID,
@@ -87,6 +76,6 @@ fn main() {
             true,
         );
 
-        sleep(Duration::from_millis(2000));
+        tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }

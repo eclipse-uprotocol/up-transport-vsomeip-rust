@@ -41,10 +41,12 @@ version = "0.7.0-SNAPSHOT"
 bytes = { version = "1.12.1" }
 cxx = { version = "1.0.198" }
 cxx-build = { version = "1.0.198" }
-lazy_static = { version = "1.4.0" }
+lazy_static = { version = "1.5.1" }
 once_cell = { version = "1.19.0" }
 protobuf = { version = "3.7.2", default-features = false }
 serial_test = { version = "3.5.0", default-features = false }
+tokio = { version = "1.54.1", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
+tracing-subscriber = { version = "0.3.23", default-features = false }
 vsomeip-proc-macro = { version = "0.7.0-SNAPSHOT", path = "vsomeip-proc-macro" }
 vsomeip-sys = { version = "0.7.0-SNAPSHOT", path = "vsomeip-sys", default-features = false }
