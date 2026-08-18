@@ -28,17 +28,17 @@ default = ["bundled"]
 bundled = ["vsomeip-sys/bundled"]
 
 [dependencies]
-async-trait = { version = "0.1" }
+async-trait = { version = "0.1.92" }
 bimap = { version = "0.6.3" }
 bytes = { workspace = true }
-crossbeam-channel = { version = "0.5.13" }
+crossbeam-channel = { version = "0.5.17" }
 cxx = { workspace = true }
 lazy_static = { workspace = true }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154" }
+tempfile = "3.27.0"
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
 tracing = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
-tempfile = "3.27"
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "sync", "time"] }
 up-rust = { version = "0.9.0" }
 vsomeip-proc-macro = { workspace = true }
 vsomeip-sys = { workspace = true }
@@ -47,7 +47,7 @@ vsomeip-sys = { workspace = true }
 hello-world-protos = { path = "../example-utils/hello-world-protos", version = "0.7.0-SNAPSHOT" }
 protobuf = { workspace = true }
 serial_test = { workspace = true }
-test-case = { version = "3.3" }
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+test-case = { version = "3.4.1" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = { workspace = true, default-features = false, features = ["log", "std"] }
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
