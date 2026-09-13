@@ -84,8 +84,10 @@ impl RawClient {
             // Receive RESPONSE
             let mut hdr = [0u8; 16];
             if let Err(error) = s.read_exact(&mut hdr) {
-                tx.send(Ev::Failed(format!("failed to read response header: {error}")))
-                    .ok();
+                tx.send(Ev::Failed(format!(
+                    "failed to read response header: {error}"
+                )))
+                .ok();
                 return;
             }
 
@@ -99,8 +101,10 @@ impl RawClient {
             };
             let mut payload = vec![0; payload_length];
             if let Err(error) = s.read_exact(&mut payload) {
-                tx.send(Ev::Failed(format!("failed to read response payload: {error}")))
-                    .ok();
+                tx.send(Ev::Failed(format!(
+                    "failed to read response payload: {error}"
+                )))
+                .ok();
                 return;
             }
 
@@ -161,9 +165,7 @@ impl UListener for MyListener {
             let resp_sink = req_source.clone();
             let resp_source = req_sink;
 
-            println!(
-                ">>> [UPROTOCOL APP] 📤 Generating UMessage RESPONSE (swapping source/sink):"
-            );
+            println!(">>> [UPROTOCOL APP] 📤 Generating UMessage RESPONSE (swapping source/sink):");
             println!("    - Response SOURCE (Sender): {:#x}", resp_source.ue_id);
             println!("    - Response SINK (Dest)  : {:#x}", resp_sink.ue_id);
             println!("--------------------------------------------------\n");
