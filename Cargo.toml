@@ -14,6 +14,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "example-utils/hello-world-protos",
     "up-transport-vsomeip",
     "vsomeip-proc-macro",
     "vsomeip-sys",

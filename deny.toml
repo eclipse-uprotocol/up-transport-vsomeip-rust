@@ -19,6 +19,7 @@ allow = [
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     # Unicode-3.0 is not (yet) on the Eclipse Foundation's list of approved licenses
