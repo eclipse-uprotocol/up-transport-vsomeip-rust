@@ -49,4 +49,4 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 autocxx-build = { version = "0.30.0" }
 cmake = { version = "0.1.58" , optional = true }
 cxx-build = { workspace = true }
-miette = { version = "5.10.0", features = ["fancy"] }
+miette = { version = "7.6.0", features = ["fancy"] }
