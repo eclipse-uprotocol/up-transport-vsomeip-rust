@@ -50,6 +50,6 @@ jobs:
           | sort -u \
           > DEPS.txt
     - name: Run Eclipse Dash Licenses tool
-      uses: eclipse-uprotocol/ci-cd/.github/actions/run-eclipse-dash@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
+      uses: eclipse-uprotocol/ci-cd/.github/actions/run-eclipse-dash@7399fb79b8557088224ef5df337dc827334027d4 # main
       with:
         components-file: DEPS.txt

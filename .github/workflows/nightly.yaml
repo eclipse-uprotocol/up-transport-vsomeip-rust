@@ -98,13 +98,13 @@ jobs:
             cargo test --verbose --workspace --all-targets
 
   deny:
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-deny-check.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-deny-check.yaml@7399fb79b8557088224ef5df337dc827334027d4 # main
     with:
       arguments: --all-features --locked --exclude-dev
 
   current-spec-compliance:
     if: false # disabled until we have a SOME/IP transport spec that includes OFT specification items
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@7399fb79b8557088224ef5df337dc827334027d4 # main
     with:
       env-file-suffix: "oft-current"
 
