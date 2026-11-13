@@ -16,7 +16,6 @@ use crate::storage::UPTransportVsomeipStorage;
 use crate::MessageHandlerId;
 use bimap::BiMap;
 use cxx::SharedPtr;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error;
@@ -36,15 +35,14 @@ generate_message_handler_extern_c_fns!(10000);
 
 type MessageHandlerIdToTransportStorage =
     HashMap<MessageHandlerId, Weak<UPTransportVsomeipStorage>>;
-lazy_static! {
-    /// A mapping from extern "C" fn [MessageHandlerId] onto [std::sync::Weak] references to [UPTransportVsomeipStorage]
-    ///
-    /// Used within the context of the proc macro crate (vsomeip-proc-macro) generated [call_shared_extern_fn]
-    /// to obtain the state of the transport needed to perform ingestion of vsomeip messages from
-    /// within callback functions registered with vsomeip
-    static ref MESSAGE_HANDLER_ID_TO_TRANSPORT_STORAGE: RwLock<MessageHandlerIdToTransportStorage> =
-        RwLock::new(HashMap::new());
-}
+/// A mapping from extern "C" fn [MessageHandlerId] onto [std::sync::Weak] references to [UPTransportVsomeipStorage]
+///
+/// Used within the context of the proc macro crate (vsomeip-proc-macro) generated [call_shared_extern_fn]
+/// to obtain the state of the transport needed to perform ingestion of vsomeip messages from
+/// within callback functions registered with vsomeip
+pub(crate) static MESSAGE_HANDLER_ID_TO_TRANSPORT_STORAGE: std::sync::LazyLock<
+    RwLock<MessageHandlerIdToTransportStorage>,
+> = std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// A facade struct from which the proc macro crate (vsomeip-proc-macro) generated `call_shared_extern_fn`
 /// can access state related to the transport

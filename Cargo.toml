@@ -33,17 +33,14 @@ exclude = [
 ]
 keywords = ["uProtocol", "SDK", "vsomeip", "SOMEIP"]
 license = "Apache-2.0"
-readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-transport-vsomeip-rust"
-rust-version = "1.85"
+rust-version = "1.88"
 version = "0.7.0-SNAPSHOT"
 
 [workspace.dependencies]
 bytes = { version = "1.12.1" }
-cxx = { version = "1.0.198" }
-cxx-build = { version = "1.0.198" }
-lazy_static = { version = "1.5.1" }
-once_cell = { version = "1.19.0" }
+cxx = { version = "1.0.205" }
+cxx-build = { version = "1.0.205" }
 protobuf = { version = "3.7.2", default-features = false }
 serial_test = { version = "3.5.0", default-features = false }
 tokio = { version = "1.54.1", default-features = false }

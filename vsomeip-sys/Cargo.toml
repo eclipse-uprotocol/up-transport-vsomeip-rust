@@ -28,14 +28,13 @@ readme = "README.md"
 
 [features]
 default = ["bundled", "ssl"]
-bundled = ["cmake"]
-ssl = ["openssl-sys"]
+bundled = ["dep:cmake"]
+ssl = ["dep:openssl-sys"]
 vendored-ssl = ["bundled", "ssl", "openssl-sys/vendored"]
 
 [dependencies]
 autocxx = { version = "0.30.0" }
 cxx = { workspace = true }
-lazy_static = { workspace = true }
 openssl-sys = { version = "0.9.117", optional = true }
 tracing = { workspace = true }
 
