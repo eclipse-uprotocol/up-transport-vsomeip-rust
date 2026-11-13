@@ -33,7 +33,6 @@ bimap = { version = "0.6.3" }
 bytes = { workspace = true }
 crossbeam-channel = { version = "0.5.17" }
 cxx = { workspace = true }
-lazy_static = { workspace = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154" }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
