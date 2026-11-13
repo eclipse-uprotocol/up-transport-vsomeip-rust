@@ -28,8 +28,8 @@ readme = "README.md"
 
 [features]
 default = ["bundled", "ssl"]
-bundled = ["cmake"]
-ssl = ["openssl-sys"]
+bundled = ["dep:cmake"]
+ssl = ["dep:openssl-sys"]
 vendored-ssl = ["bundled", "ssl", "openssl-sys/vendored"]
 
 [dependencies]
