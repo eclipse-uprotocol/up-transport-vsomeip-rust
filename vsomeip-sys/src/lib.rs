@@ -114,7 +114,6 @@ mod tests {
     use crate::vsomeip;
     use crate::vsomeip::state_type_e;
     use cxx::{let_cxx_string, SharedPtr};
-    use lazy_static::lazy_static;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::{Receiver, Sender};
     use std::sync::{mpsc, Condvar, Mutex};
@@ -187,10 +186,10 @@ mod tests {
     #[serial_test::serial]
     fn test_available_state_handler() {
         // Create a globally accessible sender
-        lazy_static! {
-            static ref SENDER: Mutex<Option<Sender<state_type_e>>> = Mutex::new(None);
-            static ref RECEIVER: Mutex<Option<Receiver<state_type_e>>> = Mutex::new(None);
-        }
+        static SENDER: std::sync::LazyLock<Mutex<Option<Sender<state_type_e>>>> =
+            std::sync::LazyLock::new(|| Mutex::new(None));
+        static RECEIVER: std::sync::LazyLock<Mutex<Option<Receiver<state_type_e>>>> =
+            std::sync::LazyLock::new(|| Mutex::new(None));
         // in production code we'll probably have to have a registry of channel receivers
         // tied to specific available_state_handler_i which we look up and get in the controlling thread
         extern "C" fn available_state_handler(available_state: state_type_e) {
@@ -290,10 +289,10 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn test_service_availability_handler() {
-        lazy_static! {
-            static ref TIMES_MESSAGE_RECEIVED: AtomicUsize = AtomicUsize::new(0);
-            static ref PAIR: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
-        }
+        static TIMES_MESSAGE_RECEIVED: std::sync::LazyLock<AtomicUsize> =
+            std::sync::LazyLock::new(|| AtomicUsize::new(0));
+        static PAIR: std::sync::LazyLock<(Mutex<bool>, Condvar)> =
+            std::sync::LazyLock::new(|| (Mutex::new(false), Condvar::new()));
 
         fn wait_for_service_available() {
             let (lock, cvar) = &*PAIR;

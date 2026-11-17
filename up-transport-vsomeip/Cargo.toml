@@ -33,10 +33,8 @@ bimap = { version = "0.6.3" }
 bytes = { workspace = true }
 crossbeam-channel = { version = "0.5.17" }
 cxx = { workspace = true }
-lazy_static = { workspace = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154" }
-tempfile = "3.27.0"
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
 tracing = { workspace = true }
 up-rust = { version = "0.9.0" }
@@ -47,6 +45,7 @@ vsomeip-sys = { workspace = true }
 hello-world-protos = { path = "../example-utils/hello-world-protos", version = "0.7.0-SNAPSHOT" }
 protobuf = { workspace = true }
 serial_test = { workspace = true }
+tempfile = { version = "3.27.0" }
 test-case = { version = "3.4.1" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = { workspace = true, default-features = false, features = ["log", "std"] }

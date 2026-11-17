@@ -65,12 +65,11 @@ pub fn generate_message_handler_extern_c_fns(input: TokenStream) -> TokenStream 
         pub(super) mod message_handler_proc_macro {
             use super::*;
 
-            lazy_static! {
-                pub(super) static ref FREE_MESSAGE_HANDLER_IDS: RwLock<HashSet<usize>> = {
+            pub(super) static FREE_MESSAGE_HANDLER_IDS: std::sync::LazyLock<RwLock<HashSet<usize>>> =
+                std::sync::LazyLock::new(|| {
                     #message_handler_ids_init
                     RwLock::new(set)
-                };
-            }
+                });
 
             #generated_fns
 
@@ -230,14 +229,19 @@ pub fn generate_available_state_handler_extern_c_fns(input: TokenStream) -> Toke
         pub(super) mod available_state_handler_proc_macro {
             use super::*;
 
-            lazy_static! {
-                pub(super) static ref FREE_AVAILABLE_STATE_HANDLER_EXTERN_FN_IDS: RwLock<HashSet<usize>> = {
+            pub(super) static FREE_AVAILABLE_STATE_HANDLER_EXTERN_FN_IDS: std::sync::LazyLock<RwLock<HashSet<usize>>> =
+                std::sync::LazyLock::new(|| {
                     #free_available_state_handler_extern_fn_ids
                     RwLock::new(set)
-                };
-                static ref AVAILABLE_STATE_SENDERS: RwLock<HashMap<usize, Option<Sender<vsomeip::state_type_e>>>> = RwLock::new(HashMap::new());
-                static ref AVAILABLE_STATE_RECEIVERS: RwLock<HashMap<usize, Option<Receiver<vsomeip::state_type_e>>>> = RwLock::new(HashMap::new());
-            }
+                });
+
+            static AVAILABLE_STATE_SENDERS:
+                std::sync::LazyLock<RwLock<HashMap<usize, Option<Sender<vsomeip::state_type_e>>>>> =
+                std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
+
+            static AVAILABLE_STATE_RECEIVERS:
+                std::sync::LazyLock<RwLock<HashMap<usize, Option<Receiver<vsomeip::state_type_e>>>>> =
+                std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
             #generated_fns
 
