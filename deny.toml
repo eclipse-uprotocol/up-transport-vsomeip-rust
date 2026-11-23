@@ -41,6 +41,4 @@ skip-tree = [
 
 [advisories]
 ignore = [
-    { id = "RUSTSEC-2024-0375", reason = "The atty crate is a transitive dependency of autocxx-build which is only used during the build process"},
-    { id = "RUSTSEC-2024-0370", reason = "The proc-macro-error crate is a transitive dependency of autocxx which is only used during the build process"},
 ]
